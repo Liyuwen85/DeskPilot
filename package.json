@@ -2,6 +2,7 @@
   "name": "deskpilot",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "DeskPilot: a local-first markdown workbench for personal productivity.",
   "main": "dist-electron/electron/main.js",
   "scripts": {
