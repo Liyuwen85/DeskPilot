@@ -272,20 +272,22 @@ async function createWindow(): Promise<AppWindow> {
     window.webContents.send("window:request-close");
   });
 
-  window.webContents.on("before-input-event", (_event, input) => {
-    const key = String(input.key || "").toUpperCase();
-    const openDevTools = key === "F12" || (key === "I" && input.control && input.shift);
+  if (!app.isPackaged) {
+    window.webContents.on("before-input-event", (_event, input) => {
+      const key = String(input.key || "").toUpperCase();
+      const openDevTools = key === "F12" || (key === "I" && input.control && input.shift);
 
-    if (!openDevTools || input.type !== "keyDown") {
-      return;
-    }
+      if (!openDevTools || input.type !== "keyDown") {
+        return;
+      }
 
-    if (window.webContents.isDevToolsOpened()) {
-      window.webContents.closeDevTools();
-    } else {
-      window.webContents.openDevTools({ mode: "detach" });
-    }
-  });
+      if (window.webContents.isDevToolsOpened()) {
+        window.webContents.closeDevTools();
+      } else {
+        window.webContents.openDevTools({ mode: "detach" });
+      }
+    });
+  }
 
   await window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"));
   return window;
