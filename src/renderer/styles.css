@@ -879,6 +879,18 @@ input {
   color: #374151;
 }
 
+.editor-content--tiptap .ProseMirror a {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.14em;
+  cursor: pointer;
+}
+
+.editor-content--tiptap .ProseMirror a:hover {
+  color: #1e40af;
+}
+
 .editor-content--tiptap .ProseMirror ul,
 .editor-content--tiptap .ProseMirror ol {
   margin: 0.35em 0 0.9em;

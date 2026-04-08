@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   renamePath: (payload: RenamePathPayload) => ipcRenderer.invoke("file:rename", payload),
   deletePath: (payload: DeletePathPayload) => ipcRenderer.invoke("file:delete", payload),
   revealInExplorer: (targetPath: string) => ipcRenderer.invoke("file:reveal-in-explorer", targetPath),
+  openExternalUrl: (targetUrl: string) => ipcRenderer.invoke("shell:open-external-url", targetUrl),
   saveFile: (payload: SaveFilePayload) => ipcRenderer.invoke("file:save", payload),
   saveFileAs: (payload: { defaultPath: string; content: string }) => ipcRenderer.invoke("file:save-as", payload),
   exportFile: (payload: { defaultPath: string; content: string }) => ipcRenderer.invoke("file:export", payload),

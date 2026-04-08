@@ -321,7 +321,7 @@ async function createWindow(): Promise<AppWindow> {
   Menu.setApplicationMenu(null);
 
   const window = new BrowserWindow({
-    width: 1050,
+    width: 1100,
     height: 720,
     minWidth: 1000,
     minHeight: 640,
@@ -649,6 +649,24 @@ ipcMain.handle("file:reveal-in-explorer", async (_event, targetPath: string) => 
 
   shell.showItemInFolder(targetPath);
   return { ok: true };
+});
+
+ipcMain.handle("shell:open-external-url", async (_event, targetUrl: string) => {
+  if (typeof targetUrl !== "string" || !targetUrl) {
+    return { ok: false };
+  }
+
+  try {
+    const parsedUrl = new URL(targetUrl);
+    if (!["http:", "https:", "mailto:"].includes(parsedUrl.protocol)) {
+      return { ok: false };
+    }
+
+    await shell.openExternal(parsedUrl.toString());
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
 });
 
 ipcMain.handle("file:save", async (_event, payload: SaveFilePayload): Promise<SaveFileResult> => {
