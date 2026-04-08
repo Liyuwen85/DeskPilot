@@ -1,0 +1,34 @@
+{
+  "name": "deskpilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeskPilot: a local-first markdown workbench for personal productivity.",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:renderer": "vite build && node scripts/fix-renderer-paths.cjs",
+    "build": "npm run build:electron && npm run build:renderer",
+    "start:app": "node scripts/start.cjs",
+    "start:check": "node scripts/start.cjs --check",
+    "start": "npm run build && npm run start:app",
+    "dev": "npm run start"
+  },
+  "dependencies": {
+    "@tiptap/extension-placeholder": "^2.26.1",
+    "@tiptap/react": "^2.26.1",
+    "@tiptap/starter-kit": "^2.26.1",
+    "electron": "^37.2.0",
+    "marked": "^16.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "turndown": "^7.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}
