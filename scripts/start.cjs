@@ -97,7 +97,11 @@ function validateBuildOutputs() {
 
 function launch(commandConfig) {
   console.log(`[DeskPilot] Launching with ${commandConfig.source} Electron`);
-  const env = { ...process.env };
+  const env = {
+    ...process.env,
+    DESKPILOT_DEV: "1",
+    NODE_ENV: process.env.NODE_ENV || "development"
+  };
   delete env.ELECTRON_RUN_AS_NODE;
 
   const child = spawn(commandConfig.command, commandConfig.args, {

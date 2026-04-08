@@ -28,6 +28,7 @@ const APP_ICON_PATH = path.join(app.getAppPath(), "screenshot", "deskpilot_logo.
 
 let mainWindow: AppWindow | null = null;
 let pendingLaunchWorkspacePath = "";
+const isDevRuntime = !app.isPackaged || process.env.DESKPILOT_DEV === "1";
 
 function normalizeCliPath(candidatePath: string): string {
   return path.resolve(candidatePath);
@@ -348,7 +349,7 @@ async function createWindow(): Promise<AppWindow> {
     window.webContents.send("window:request-close");
   });
 
-  if (!app.isPackaged) {
+  if (isDevRuntime) {
     window.webContents.on("before-input-event", (_event, input) => {
       const key = String(input.key || "").toUpperCase();
       const openDevTools = key === "F12" || (key === "I" && input.control && input.shift);
