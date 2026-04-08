@@ -906,6 +906,15 @@ function App() {
     }
   }, [openFilePayload]);
 
+  const openExternalWorkspacePath = React.useCallback(async (targetPath) => {
+    if (!targetPath) {
+      return;
+    }
+
+    const result = await window.desktopApi.openWorkspacePath(targetPath);
+    applyWorkspaceResult(result);
+  }, [applyWorkspaceResult]);
+
   React.useEffect(() => {
     if (didRestoreWorkspaceRef.current) {
       return;
@@ -920,18 +929,30 @@ function App() {
     if (!pendingSessionSnapshotRef.current?.tabs?.length) {
       didHydrateSessionRef.current = true;
     }
-    if (!lastWorkspacePath) {
-      return;
-    }
+    void window.desktopApi.getLaunchWorkspacePath()
+      .then(async (launchWorkspacePath) => {
+        const initialWorkspacePath = launchWorkspacePath || lastWorkspacePath;
+        if (!initialWorkspacePath) {
+          return;
+        }
 
-    void window.desktopApi.openWorkspacePath(lastWorkspacePath)
-      .then((result) => {
-        applyWorkspaceResult(result);
+        await openExternalWorkspacePath(initialWorkspacePath);
       })
       .catch(() => {
         persistLastWorkspacePath("");
       });
-  }, [applyWorkspaceResult]);
+  }, [openExternalWorkspacePath]);
+
+  React.useEffect(() => {
+    return window.desktopApi.onOpenWorkspacePath((targetPath) => {
+      if (!targetPath) {
+        return;
+      }
+
+      void openExternalWorkspacePath(targetPath).catch(() => {
+      });
+    });
+  }, [openExternalWorkspacePath]);
 
   React.useEffect(() => {
     const snapshot = pendingSessionSnapshotRef.current;

@@ -108,6 +108,7 @@ export interface WorkspaceMutationResult {
 export interface DesktopApi {
   pickDirectory: () => Promise<WorkspacePayload | null>;
   openFileDialog: () => Promise<WorkspacePayload | null>;
+  getLaunchWorkspacePath: () => Promise<string>;
   confirmCloseTab: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   confirmCloseWindow: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   openWorkspacePath: (targetPath: string) => Promise<WorkspacePayload>;
@@ -123,6 +124,7 @@ export interface DesktopApi {
   saveFileAs: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;
   exportFile: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;
   onRequestWindowClose: (listener: () => void) => () => void;
+  onOpenWorkspacePath: (listener: (targetPath: string) => void) => () => void;
   confirmWindowClose: () => void;
   newWindow: () => Promise<{ ok: boolean }>;
   quitApp: () => void;

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
+const { applyWindowsExecutableBranding } = require("./windows-branding.cjs");
 
 const projectRoot = path.resolve(__dirname, "..");
 const electronPackagePath = require.resolve("electron/package.json", { paths: [projectRoot] });
@@ -9,6 +10,9 @@ const electronDist = path.join(electronRoot, "dist");
 const releaseRoot = path.join(projectRoot, "release");
 const releaseDir = path.join(releaseRoot, "DeskPilot-win32-x64");
 const appDir = path.join(releaseDir, "resources", "app");
+const productName = "DeskPilot";
+const appId = "com.doveyh.deskpilot";
+const iconPngPath = path.join(projectRoot, "screenshot", "deskpilot_logo.png");
 
 function assertExists(targetPath, label) {
   if (!fs.existsSync(targetPath)) {
@@ -30,7 +34,7 @@ async function writeAppPackageJson() {
   const sourcePackage = JSON.parse(await fsp.readFile(path.join(projectRoot, "package.json"), "utf-8"));
   const runtimePackage = {
     name: sourcePackage.name,
-    productName: "DeskPilot",
+    productName,
     version: sourcePackage.version,
     description: sourcePackage.description,
     main: "dist-electron/electron/main.js",
@@ -54,13 +58,27 @@ async function main() {
   await copyDir(electronDist, releaseDir);
   await copyDir(path.join(projectRoot, "dist"), path.join(appDir, "dist"));
   await copyDir(path.join(projectRoot, "dist-electron"), path.join(appDir, "dist-electron"));
+  if (fs.existsSync(path.join(projectRoot, "screenshot"))) {
+    await copyDir(path.join(projectRoot, "screenshot"), path.join(appDir, "screenshot"));
+  }
   await writeAppPackageJson();
 
   const electronExe = path.join(releaseDir, "electron.exe");
-  const productExe = path.join(releaseDir, "DeskPilot.exe");
+  const productExe = path.join(releaseDir, `${productName}.exe`);
   if (fs.existsSync(electronExe)) {
     await fsp.rename(electronExe, productExe);
   }
+
+  const sourcePackage = JSON.parse(await fsp.readFile(path.join(projectRoot, "package.json"), "utf-8"));
+  await applyWindowsExecutableBranding(productExe, {
+    productName,
+    version: sourcePackage.version,
+    iconPngPath,
+    iconIcoPath: path.join(releaseRoot, "deskpilot-release.ico"),
+    appId,
+    companyName: sourcePackage.author || "doveyh",
+    copyright: "Copyright 2026 doveyh"
+  });
 
   console.log(`[DeskPilot] Release created: ${releaseDir}`);
   console.log(`[DeskPilot] Launch executable: ${productExe}`);

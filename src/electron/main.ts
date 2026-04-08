@@ -1,4 +1,5 @@
 import path from "node:path";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type {
@@ -20,6 +21,73 @@ import type {
 } from "../shared/types";
 
 type AppWindow = BrowserWindow & { __allowClose?: boolean };
+
+const APP_NAME = "DeskPilot";
+const APP_USER_MODEL_ID = "com.doveyh.deskpilot";
+const APP_ICON_PATH = path.join(app.getAppPath(), "screenshot", "deskpilot_logo.png");
+
+let mainWindow: AppWindow | null = null;
+let pendingLaunchWorkspacePath = "";
+
+function normalizeCliPath(candidatePath: string): string {
+  return path.resolve(candidatePath);
+}
+
+function extractLaunchWorkspacePath(argv: string[]): string {
+  const appPath = app.getAppPath();
+  const ignoredPaths = new Set<string>([
+    normalizeCliPath(process.execPath),
+    normalizeCliPath(appPath),
+    normalizeCliPath(path.join(appPath, "dist-electron", "electron", "main.js"))
+  ]);
+
+  for (const rawArg of argv) {
+    if (!rawArg || rawArg.startsWith("-")) {
+      continue;
+    }
+
+    const candidatePath = normalizeCliPath(rawArg);
+    if (ignoredPaths.has(candidatePath)) {
+      continue;
+    }
+
+    if (fsSync.existsSync(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  return "";
+}
+
+function extractLaunchWorkspacePathFromCwd(): string {
+  const candidatePath = normalizeCliPath(process.cwd());
+  const ignoredPaths = new Set<string>([
+    normalizeCliPath(app.getAppPath()),
+    normalizeCliPath(path.dirname(process.execPath)),
+    normalizeCliPath(path.dirname(app.getAppPath()))
+  ]);
+
+  if (ignoredPaths.has(candidatePath)) {
+    return "";
+  }
+
+  return fsSync.existsSync(candidatePath) ? candidatePath : "";
+}
+
+function sendWorkspacePathToWindow(window: AppWindow | null, targetPath: string) {
+  if (!window || !targetPath) {
+    return;
+  }
+
+  if (window.webContents.isLoading()) {
+    window.webContents.once("did-finish-load", () => {
+      window.webContents.send("workspace:open-external-path", targetPath);
+    });
+    return;
+  }
+
+  window.webContents.send("workspace:open-external-path", targetPath);
+}
 
 function getFileKind(filePath: string): FileKind {
   const ext = path.extname(filePath).toLowerCase();
@@ -96,8 +164,14 @@ async function readDirectoryChildren(targetPath: string): Promise<TreeNode[]> {
       } satisfies TreeNode;
     }
 
-    const childEntries = await fs.readdir(entryPath, { withFileTypes: true });
-    const hasChildren = childEntries.some((child) => !child.name.startsWith("."));
+    let hasChildren = false;
+    try {
+      const childEntries = await fs.readdir(entryPath, { withFileTypes: true });
+      hasChildren = childEntries.some((child) => !child.name.startsWith("."));
+    } catch {
+      hasChildren = false;
+    }
+
     return {
       name: entry.name,
       path: entryPath,
@@ -247,13 +321,15 @@ async function createWindow(): Promise<AppWindow> {
   Menu.setApplicationMenu(null);
 
   const window = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: 1050,
+    height: 720,
     minWidth: 1000,
     minHeight: 640,
     frame: false,
+    title: APP_NAME,
     titleBarStyle: "hidden",
     backgroundColor: "#111827",
+    icon: fsSync.existsSync(APP_ICON_PATH) ? APP_ICON_PATH : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -290,15 +366,56 @@ async function createWindow(): Promise<AppWindow> {
   }
 
   await window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"));
+  mainWindow = window;
+  window.on("closed", () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
+  });
   return window;
 }
 
+app.setName(APP_NAME);
+app.setAppUserModelId(APP_USER_MODEL_ID);
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+pendingLaunchWorkspacePath = extractLaunchWorkspacePath(process.argv) || extractLaunchWorkspacePathFromCwd();
+
+app.on("second-instance", (_event, argv) => {
+  const nextWorkspacePath = extractLaunchWorkspacePath(argv);
+  if (nextWorkspacePath) {
+    pendingLaunchWorkspacePath = nextWorkspacePath;
+  }
+  if (!mainWindow) {
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.focus();
+
+  if (nextWorkspacePath) {
+    sendWorkspacePathToWindow(mainWindow, nextWorkspacePath);
+  }
+});
+
 app.whenReady().then(async () => {
-  await createWindow();
+  const window = await createWindow();
+  if (pendingLaunchWorkspacePath) {
+    sendWorkspacePathToWindow(window, pendingLaunchWorkspacePath);
+  }
 
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      await createWindow();
+      const nextWindow = await createWindow();
+      if (pendingLaunchWorkspacePath) {
+        sendWorkspacePathToWindow(nextWindow, pendingLaunchWorkspacePath);
+      }
     }
   });
 });
@@ -341,6 +458,12 @@ ipcMain.handle("dialog:open-file", async (event) => {
   }
 
   return loadWorkspaceFromPath(result.filePaths[0]);
+});
+
+ipcMain.handle("app:get-launch-workspace-path", async () => {
+  const nextPath = pendingLaunchWorkspacePath;
+  pendingLaunchWorkspacePath = "";
+  return nextPath;
 });
 
 ipcMain.handle("dialog:confirm-close-tab", async (event, payload: ConfirmClosePayload): Promise<ConfirmCloseResult> => {

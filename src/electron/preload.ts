@@ -12,6 +12,7 @@ import type {
 contextBridge.exposeInMainWorld("desktopApi", {
   pickDirectory: () => ipcRenderer.invoke("dialog:pick-directory"),
   openFileDialog: () => ipcRenderer.invoke("dialog:open-file"),
+  getLaunchWorkspacePath: () => ipcRenderer.invoke("app:get-launch-workspace-path"),
   confirmCloseTab: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-tab", payload),
   confirmCloseWindow: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-window", payload),
   openWorkspacePath: (targetPath: string) => ipcRenderer.invoke("workspace:open-path", targetPath),
@@ -30,6 +31,11 @@ contextBridge.exposeInMainWorld("desktopApi", {
     const wrapped = () => listener();
     ipcRenderer.on("window:request-close", wrapped);
     return () => ipcRenderer.removeListener("window:request-close", wrapped);
+  },
+  onOpenWorkspacePath: (listener: (targetPath: string) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, targetPath: string) => listener(targetPath);
+    ipcRenderer.on("workspace:open-external-path", wrapped);
+    return () => ipcRenderer.removeListener("workspace:open-external-path", wrapped);
   },
   confirmWindowClose: () => ipcRenderer.send("window:confirm-close"),
   newWindow: () => ipcRenderer.invoke("window:new"),
