@@ -74,6 +74,27 @@ export function MediaTabPane({ path, name, kind, active, onStatusChange }: Media
   }, [active]);
 
   React.useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    return window.desktopApi.onWindowEscape(() => {
+      setExpanded((previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement) {
+          activeElement.blur();
+        }
+
+        return false;
+      });
+    });
+  }, [active]);
+
+  React.useEffect(() => {
     emitStatus();
   }, [emitStatus, path]);
 
@@ -119,6 +140,14 @@ export function MediaTabPane({ path, name, kind, active, onStatusChange }: Media
 
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
+      if (expanded && event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        target?.blur?.();
+        setExpanded(false);
+        return;
+      }
+
       if (
         event.defaultPrevented ||
         !mediaRef.current ||
@@ -159,8 +188,8 @@ export function MediaTabPane({ path, name, kind, active, onStatusChange }: Media
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [active, emitStatus]);
 
   const handleCaptureFrame = React.useCallback(async () => {

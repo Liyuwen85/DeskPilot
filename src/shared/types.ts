@@ -114,6 +114,11 @@ export interface FileStatsResult {
   size: number;
 }
 
+export interface WorkspaceIndexEntry {
+  name: string;
+  path: string;
+}
+
 export interface DesktopApi {
   pickDirectory: () => Promise<WorkspacePayload | null>;
   openFileDialog: () => Promise<WorkspacePayload | null>;
@@ -124,6 +129,7 @@ export interface DesktopApi {
   confirmCloseTab: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   confirmCloseWindow: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   openWorkspacePath: (targetPath: string) => Promise<WorkspacePayload>;
+  indexWorkspaceFiles: (rootPath: string) => Promise<WorkspaceIndexEntry[]>;
   readDirectory: (directoryPath: string) => Promise<TreeNode[]>;
   readFile: (filePath: string) => Promise<FileTab>;
   getFileStats: (filePath: string) => Promise<FileStatsResult>;
@@ -139,6 +145,7 @@ export interface DesktopApi {
   saveFileAs: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;
   exportFile: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;
   onRequestWindowClose: (listener: () => void) => () => void;
+  onWindowEscape: (listener: () => void) => () => void;
   onOpenWorkspacePath: (listener: (targetPath: string) => void) => () => void;
   onRestoreDocumentTab: (listener: (targetPath: string) => void) => () => void;
   confirmWindowClose: () => void;

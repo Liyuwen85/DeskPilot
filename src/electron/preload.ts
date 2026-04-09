@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   confirmCloseTab: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-tab", payload),
   confirmCloseWindow: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-window", payload),
   openWorkspacePath: (targetPath: string) => ipcRenderer.invoke("workspace:open-path", targetPath),
+  indexWorkspaceFiles: (rootPath: string) => ipcRenderer.invoke("workspace:index-files", rootPath),
   readDirectory: (directoryPath: string) => ipcRenderer.invoke("workspace:read-directory", directoryPath),
   readFile: (filePath: string) => ipcRenderer.invoke("viewer:read", filePath),
   getFileStats: (filePath: string) => ipcRenderer.invoke("viewer:stat", filePath),
@@ -38,6 +39,11 @@ contextBridge.exposeInMainWorld("desktopApi", {
     const wrapped = () => listener();
     ipcRenderer.on("window:request-close", wrapped);
     return () => ipcRenderer.removeListener("window:request-close", wrapped);
+  },
+  onWindowEscape: (listener: () => void) => {
+    const wrapped = () => listener();
+    ipcRenderer.on("window:escape", wrapped);
+    return () => ipcRenderer.removeListener("window:escape", wrapped);
   },
   onOpenWorkspacePath: (listener: (targetPath: string) => void) => {
     const wrapped = (_event: Electron.IpcRendererEvent, targetPath: string) => listener(targetPath);

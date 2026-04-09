@@ -17,6 +17,7 @@ import type {
   SaveFilePayload,
   SaveFileResult,
   TreeNode,
+  WorkspaceIndexEntry,
   WorkspaceMutationResult,
   WorkspacePayload
 } from "../shared/types";
@@ -289,6 +290,34 @@ async function readDirectoryChildren(targetPath: string): Promise<TreeNode[]> {
   }));
 }
 
+async function indexWorkspaceFiles(rootPath: string): Promise<WorkspaceIndexEntry[]> {
+  const results: WorkspaceIndexEntry[] = [];
+
+  async function visitDirectory(directoryPath: string): Promise<void> {
+    const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) {
+        continue;
+      }
+
+      const entryPath = path.join(directoryPath, entry.name);
+      if (entry.isDirectory()) {
+        await visitDirectory(entryPath);
+        continue;
+      }
+
+      results.push({
+        name: entry.name,
+        path: entryPath
+      });
+    }
+  }
+
+  await visitDirectory(rootPath);
+  return results;
+}
+
 async function readFilePayload(filePath: string): Promise<FileTab> {
   const stat = await fs.stat(filePath);
   if (!stat.isFile()) {
@@ -552,6 +581,20 @@ async function createWindow(options: { mode?: WindowMode; targetPath?: string } 
         window.webContents.openDevTools({ mode: "detach" });
       }
     });
+  } else {
+    window.webContents.on("before-input-event", (_event, input) => {
+      if (input.type === "keyDown" && input.key === "Escape") {
+        window.webContents.send("window:escape");
+      }
+    });
+  }
+
+  if (isDevRuntime) {
+    window.webContents.on("before-input-event", (_event, input) => {
+      if (input.type === "keyDown" && input.key === "Escape") {
+        window.webContents.send("window:escape");
+      }
+    });
   }
 
   await window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"), {
@@ -766,6 +809,19 @@ ipcMain.handle("workspace:read-directory", async (_event, directoryPath: string)
   }
 
   return readDirectoryChildren(directoryPath);
+});
+
+ipcMain.handle("workspace:index-files", async (_event, rootPath: string) => {
+  if (typeof rootPath !== "string" || !rootPath) {
+    throw new Error("Workspace root path is required.");
+  }
+
+  const stat = await fs.stat(rootPath);
+  if (!stat.isDirectory()) {
+    throw new Error("Workspace root path is invalid.");
+  }
+
+  return indexWorkspaceFiles(rootPath);
 });
 
 ipcMain.handle("viewer:read", async (_event, filePath: string) => {
