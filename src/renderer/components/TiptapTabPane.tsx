@@ -1,11 +1,6 @@
 import React from "react";
 import Image from "@tiptap/extension-image";
 import { EditorContent, useEditor } from "@tiptap/react";
-import Link from "@tiptap/extension-link";
-import Table from "@tiptap/extension-table";
-import TableCell from "@tiptap/extension-table-cell";
-import TableHeader from "@tiptap/extension-table-header";
-import TableRow from "@tiptap/extension-table-row";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { marked } from "marked";
@@ -33,7 +28,6 @@ export interface TiptapOutlineApi {
 export interface TiptapCommandApi {
   toggleHeading: (level: number) => void;
   insertHorizontalRule: () => void;
-  insertTable: () => void;
   insertImageFromFile: () => Promise<void>;
 }
 
@@ -296,19 +290,14 @@ export function TiptapTabPane({
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        link: {
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true
+        }
+      }),
       Image,
-      Table.configure({
-        resizable: false
-      }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        linkOnPaste: true
-      }),
       Placeholder.configure({
         placeholder: UI_TEXT.editor.markdownPlaceholder
       })
@@ -559,17 +548,6 @@ export function TiptapTabPane({
           chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
         }
         chain.setHorizontalRule().run();
-      },
-      insertTable: () => {
-        const chain = editor.chain().focus();
-        const storedSelection = lastKnownSelectionRef.current;
-        if (!storedSelection) {
-          chain.focus("end");
-        } else {
-          const { anchor, head } = clampSelection(storedSelection, editor.state.doc.content.size);
-          chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
-        }
-        chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
       },
       insertImageFromFile: async () => {
         await handleInsertImageFromFile();

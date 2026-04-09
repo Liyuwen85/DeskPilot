@@ -2024,7 +2024,6 @@ function App() {
             markdownActions={activeMarkdownCommands ? {
               onHeading: (level) => activeMarkdownCommands.toggleHeading(level),
               onHorizontalRule: () => activeMarkdownCommands.insertHorizontalRule(),
-              onTable: () => activeMarkdownCommands.insertTable(),
               onImage: () => activeMarkdownCommands.insertImageFromFile()
             } : undefined}
           />

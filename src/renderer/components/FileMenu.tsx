@@ -1,19 +1,24 @@
 import React from "react";
 
+interface RecentItemLike {
+  kind: string;
+  path: string;
+  label: string;
+}
+
 interface MarkdownMenuActions {
   onHeading: (level: number) => void;
   onHorizontalRule: () => void;
-  onTable: () => void;
   onImage: () => void | Promise<void>;
 }
 
 interface FileMenuProps {
-  recentItems: Array<{ kind: string; path: string; label: string }>;
+  recentItems: RecentItemLike[];
   onNewTab: () => void | Promise<void>;
   onNewWindow: () => void | Promise<void>;
   onOpenFile: () => void | Promise<void>;
   onOpenFolder: () => void | Promise<void>;
-  onOpenRecent: (item: { kind: string; path: string; label: string }) => void | Promise<void>;
+  onOpenRecent: (item: RecentItemLike) => void | Promise<void>;
   onSave: () => void | Promise<void>;
   onSaveAs: () => void | Promise<void>;
   onQuit: () => void | Promise<void>;
@@ -167,9 +172,6 @@ export function FileMenu({
             <div className="menu-dropdown__separator" />
             <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onHorizontalRule)}>
               <span className="menu-dropdown__label">分割线</span>
-            </button>
-            <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onTable)}>
-              <span className="menu-dropdown__label">表格</span>
             </button>
             <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onImage)}>
               <span className="menu-dropdown__label">图片</span>
