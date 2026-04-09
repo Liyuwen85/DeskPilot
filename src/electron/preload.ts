@@ -12,6 +12,7 @@ import type {
 contextBridge.exposeInMainWorld("desktopApi", {
   pickDirectory: () => ipcRenderer.invoke("dialog:pick-directory"),
   openFileDialog: () => ipcRenderer.invoke("dialog:open-file"),
+  pickImageFile: (defaultDirectory?: string) => ipcRenderer.invoke("dialog:pick-image-file", defaultDirectory),
   getLaunchWorkspacePath: () => ipcRenderer.invoke("app:get-launch-workspace-path"),
   confirmCloseTab: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-tab", payload),
   confirmCloseWindow: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-window", payload),

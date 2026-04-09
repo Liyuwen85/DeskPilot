@@ -108,6 +108,7 @@ export interface WorkspaceMutationResult {
 export interface DesktopApi {
   pickDirectory: () => Promise<WorkspacePayload | null>;
   openFileDialog: () => Promise<WorkspacePayload | null>;
+  pickImageFile: (defaultDirectory?: string) => Promise<string | null>;
   getLaunchWorkspacePath: () => Promise<string>;
   confirmCloseTab: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   confirmCloseWindow: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;

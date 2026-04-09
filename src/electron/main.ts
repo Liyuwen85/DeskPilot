@@ -461,6 +461,28 @@ ipcMain.handle("dialog:open-file", async (event) => {
   return loadWorkspaceFromPath(result.filePaths[0]);
 });
 
+ipcMain.handle("dialog:pick-image-file", async (event, defaultDirectory?: string) => {
+  const currentWindow = getWindowFromEvent(event);
+  if (!currentWindow) {
+    return null;
+  }
+
+  const result = await dialog.showOpenDialog(currentWindow, {
+    properties: ["openFile"],
+    defaultPath: typeof defaultDirectory === "string" && defaultDirectory ? defaultDirectory : undefined,
+    filters: [
+      { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"] },
+      { name: "All Files", extensions: ["*"] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return result.filePaths[0];
+});
+
 ipcMain.handle("app:get-launch-workspace-path", async () => {
   const nextPath = pendingLaunchWorkspacePath;
   pendingLaunchWorkspacePath = "";
