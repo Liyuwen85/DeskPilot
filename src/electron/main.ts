@@ -100,6 +100,14 @@ function getFileKind(filePath: string): FileKind {
     return "image";
   }
 
+  if (isAudioFile(filePath)) {
+    return "audio";
+  }
+
+  if (isVideoFile(filePath)) {
+    return "video";
+  }
+
   if (isPdfFile(filePath)) {
     return "pdf";
   }
@@ -118,6 +126,24 @@ function isImageFile(filePath: string): boolean {
 
 function isPdfFile(filePath: string): boolean {
   return path.extname(filePath).toLowerCase() === ".pdf";
+}
+
+function isAudioFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  const audioExtensions = new Set([
+    ".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".opus", ".weba"
+  ]);
+
+  return audioExtensions.has(ext);
+}
+
+function isVideoFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  const videoExtensions = new Set([
+    ".mp4", ".webm", ".ogv", ".mov", ".m4v", ".mkv", ".avi"
+  ]);
+
+  return videoExtensions.has(ext);
 }
 
 function isTextFile(filePath: string): boolean {
@@ -231,6 +257,30 @@ async function readFilePayload(filePath: string): Promise<FileTab> {
       encoding: "binary",
       readonlyHint: true,
       kind: "pdf",
+      isTemporary: false
+    };
+  }
+
+  if (isAudioFile(filePath)) {
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      content: filePath,
+      encoding: "binary",
+      readonlyHint: true,
+      kind: "audio",
+      isTemporary: false
+    };
+  }
+
+  if (isVideoFile(filePath)) {
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      content: filePath,
+      encoding: "binary",
+      readonlyHint: true,
+      kind: "video",
       isTemporary: false
     };
   }
@@ -620,6 +670,21 @@ ipcMain.handle("workspace:read-directory", async (_event, directoryPath: string)
 
 ipcMain.handle("viewer:read", async (_event, filePath: string) => {
   return readFilePayload(filePath);
+});
+
+ipcMain.handle("viewer:stat", async (_event, filePath: string) => {
+  if (typeof filePath !== "string" || !filePath) {
+    throw new Error("File path is required.");
+  }
+
+  const stat = await fs.stat(filePath);
+  if (!stat.isFile()) {
+    throw new Error("Target is not a file.");
+  }
+
+  return {
+    size: stat.size
+  };
 });
 
 ipcMain.handle("file:create-markdown", async (_event, payload: CreateMarkdownPayload): Promise<CreateMarkdownResult> => {

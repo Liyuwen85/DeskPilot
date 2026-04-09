@@ -21,24 +21,68 @@ interface ImageTabPaneProps {
   path: string;
   name?: string;
   active: boolean;
+  onStatusChange?: (status: { zoomPercent: number; width: number; height: number; fileSizeBytes: number } | null) => void;
 }
 
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 5;
 const SCALE_STEP = 0.1;
 
-export function ImageTabPane({ path, name, active }: ImageTabPaneProps) {
+export function ImageTabPane({ path, name, active, onStatusChange }: ImageTabPaneProps) {
   const [scale, setScale] = React.useState(1);
   const [offset, setOffset] = React.useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = React.useState(false);
+  const [imageSize, setImageSize] = React.useState({ width: 0, height: 0 });
+  const [fileSizeBytes, setFileSizeBytes] = React.useState(0);
   const dragRef = React.useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
 
   React.useEffect(() => {
     setScale(1);
     setOffset({ x: 0, y: 0 });
     setIsDragging(false);
+    setImageSize({ width: 0, height: 0 });
+    setFileSizeBytes(0);
     dragRef.current = null;
   }, [path]);
+
+  React.useEffect(() => {
+    onStatusChange?.({
+      zoomPercent: Math.round(scale * 100),
+      width: imageSize.width,
+      height: imageSize.height,
+      fileSizeBytes
+    });
+  }, [fileSizeBytes, imageSize.height, imageSize.width, onStatusChange, scale]);
+
+  React.useEffect(() => {
+    return () => onStatusChange?.(null);
+  }, [onStatusChange]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    void window.desktopApi.getFileStats(path).then((result) => {
+      if (cancelled) {
+        return;
+      }
+
+      onStatusChange?.({
+        zoomPercent: Math.round(scale * 100),
+        width: imageSize.width,
+        height: imageSize.height,
+        fileSizeBytes: Number(result?.size) || 0
+      });
+      setFileSizeBytes(Number(result?.size) || 0);
+    }).catch(() => {
+      if (!cancelled) {
+        setFileSizeBytes(0);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onStatusChange, path]);
 
   const handleWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -106,6 +150,12 @@ export function ImageTabPane({ path, name, active }: ImageTabPaneProps) {
             src={toFileUrl(path)}
             alt={name || "Image"}
             draggable={false}
+            onLoad={(event) => {
+              setImageSize({
+                width: event.currentTarget.naturalWidth,
+                height: event.currentTarget.naturalHeight
+              });
+            }}
             style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`
             }}

@@ -1,4 +1,4 @@
-export type FileKind = "markdown" | "text" | "image" | "pdf" | "binary";
+export type FileKind = "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "binary";
 export type TreeNodeType = "directory" | "file";
 export type CloseAction = "save" | "discard" | "cancel";
 export type ToastType = "success" | "error" | "info";
@@ -105,6 +105,10 @@ export interface WorkspaceMutationResult {
   targetPath?: string;
 }
 
+export interface FileStatsResult {
+  size: number;
+}
+
 export interface DesktopApi {
   pickDirectory: () => Promise<WorkspacePayload | null>;
   openFileDialog: () => Promise<WorkspacePayload | null>;
@@ -115,6 +119,7 @@ export interface DesktopApi {
   openWorkspacePath: (targetPath: string) => Promise<WorkspacePayload>;
   readDirectory: (directoryPath: string) => Promise<TreeNode[]>;
   readFile: (filePath: string) => Promise<FileTab>;
+  getFileStats: (filePath: string) => Promise<FileStatsResult>;
   createMarkdownFile: (payload: CreateMarkdownPayload) => Promise<CreateMarkdownResult>;
   createTextFile: (payload: CreateTextPayload) => Promise<WorkspaceMutationResult>;
   createFolder: (payload: CreateFolderPayload) => Promise<WorkspaceMutationResult>;

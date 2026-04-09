@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   openWorkspacePath: (targetPath: string) => ipcRenderer.invoke("workspace:open-path", targetPath),
   readDirectory: (directoryPath: string) => ipcRenderer.invoke("workspace:read-directory", directoryPath),
   readFile: (filePath: string) => ipcRenderer.invoke("viewer:read", filePath),
+  getFileStats: (filePath: string) => ipcRenderer.invoke("viewer:stat", filePath),
   createMarkdownFile: (payload: CreateMarkdownPayload) => ipcRenderer.invoke("file:create-markdown", payload),
   createTextFile: (payload: CreateTextPayload) => ipcRenderer.invoke("file:create-text", payload),
   createFolder: (payload: CreateFolderPayload) => ipcRenderer.invoke("file:create-folder", payload),

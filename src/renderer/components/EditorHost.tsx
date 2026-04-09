@@ -1,5 +1,6 @@
 import React from "react";
 import { ImageTabPane } from "./ImageTabPane";
+import { MediaTabPane } from "./MediaTabPane";
 import { PdfTabPane } from "./PdfTabPane";
 import { TextTabPane } from "./TextTabPane";
 import { UI_TEXT } from "../ui-text";
@@ -14,12 +15,22 @@ interface FileTabLike {
   path: string;
   name?: string;
   content: string;
-  kind: "markdown" | "text" | "image" | "pdf" | "binary";
+  kind: "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "binary";
 }
 
 interface MarkdownDraftLike {
   html: string;
   text: string;
+}
+
+interface PreviewStatusLike {
+  zoomPercent?: number;
+  width?: number;
+  height?: number;
+  playing?: boolean;
+  currentTime?: number;
+  duration?: number;
+  fileSizeBytes?: number;
 }
 
 interface EditorHostProps {
@@ -32,6 +43,7 @@ interface EditorHostProps {
   onOutlineChange?: (tabPath: string, items: TiptapOutlineItem[]) => void;
   onOutlineApiReady?: (tabPath: string, api: TiptapOutlineApi | null) => void;
   onCommandApiReady?: (tabPath: string, api: TiptapCommandApi | null) => void;
+  onPreviewStatusChange?: (tabPath: string, status: PreviewStatusLike | null) => void;
 }
 
 export const EditorHost = React.memo(function EditorHost({
@@ -43,7 +55,8 @@ export const EditorHost = React.memo(function EditorHost({
   onSaveShortcut,
   onOutlineChange,
   onOutlineApiReady,
-  onCommandApiReady
+  onCommandApiReady,
+  onPreviewStatusChange
 }: EditorHostProps) {
   const [mountedTabPaths, setMountedTabPaths] = React.useState<string[]>(() => (
     activeTabPath ? [activeTabPath] : []
@@ -110,6 +123,7 @@ export const EditorHost = React.memo(function EditorHost({
               path={tab.content || tab.path}
               name={tab.name}
               active={active}
+              onStatusChange={(status) => onPreviewStatusChange?.(tab.path, status)}
             />
           );
         }
@@ -120,6 +134,19 @@ export const EditorHost = React.memo(function EditorHost({
               key={tab.path}
               path={tab.content || tab.path}
               active={active}
+            />
+          );
+        }
+
+        if (tab.kind === "audio" || tab.kind === "video") {
+          return (
+            <MediaTabPane
+              key={tab.path}
+              path={tab.content || tab.path}
+              name={tab.name}
+              kind={tab.kind}
+              active={active}
+              onStatusChange={(status) => onPreviewStatusChange?.(tab.path, status)}
             />
           );
         }

@@ -390,6 +390,33 @@ function getTemporaryTabDisplayPath(tab) {
   return joinFilePath(preferredDirectory, tab.name || "");
 }
 
+function formatPreviewDuration(totalSeconds) {
+  const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatFileSize(bytes) {
+  const size = Math.max(0, Number(bytes) || 0);
+  if (size >= 1024 * 1024 * 1024) {
+    return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  if (size >= 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${size} B`;
+}
+
 function App() {
   const [rootPath, setRootPath] = React.useState("");
   const [tree, setTree] = React.useState(null);
@@ -416,6 +443,7 @@ function App() {
   const [indexedFiles, setIndexedFiles] = React.useState<any[]>([]);
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outlineMap, setOutlineMap] = React.useState<Record<string, TiptapOutlineItem[]>>({});
+  const [previewStatusMap, setPreviewStatusMap] = React.useState<Record<string, any>>({});
   const searchInputRef = React.useRef(null);
   const searchBoxRef = React.useRef(null);
   const treeRef = React.useRef(tree);
@@ -462,6 +490,10 @@ function App() {
   React.useEffect(() => {
     const availablePaths = new Set(tabs.map((tab) => tab.path));
     setOutlineMap((previous) => {
+      const nextEntries = Object.entries(previous).filter(([tabPath]) => availablePaths.has(tabPath));
+      return nextEntries.length === Object.keys(previous).length ? previous : Object.fromEntries(nextEntries);
+    });
+    setPreviewStatusMap((previous) => {
       const nextEntries = Object.entries(previous).filter(([tabPath]) => availablePaths.has(tabPath));
       return nextEntries.length === Object.keys(previous).length ? previous : Object.fromEntries(nextEntries);
     });
@@ -542,7 +574,7 @@ function App() {
   }, [searchOpen]);
 
   const getPersistedContentForTab = React.useCallback(async (tab) => {
-    if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "pdf") {
+    if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf") {
       return "";
     }
 
@@ -613,18 +645,36 @@ function App() {
   const contextMenuTabIndex = contextMenuTab ? tabs.findIndex((tab) => tab.path === contextMenuTab.path) : -1;
   const activeMarkdownDraft = activeTab ? markdownDraftMap[activeTab.path] : null;
   const activeTabText = activeTab
-    ? activeTab.kind === "markdown"
+      ? activeTab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[activeTab.path] ?? activeTab.content)
-      : activeTab.kind === "image" || activeTab.kind === "pdf"
+      : activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf"
         ? ""
       : normalizeText(tabTextMap[activeTab.path] ?? activeTab.content)
     : "";
   const activeSavedText = activeTab ? normalizeText(savedTextMap[activeTab.path] ?? activeTab.content) : "";
+  const activePreviewStatus = activeTab ? previewStatusMap[activeTab.path] || null : null;
   const activeIsDirty = Boolean(activeTab) && (
     activeTab.kind === "markdown"
       ? isMarkdownTabDirty(activeTab)
       : activeTabText !== activeSavedText
   );
+  const activeTabKindLabel = activeTab?.kind === "markdown"
+    ? "Markdown"
+    : activeTab?.kind === "image"
+      ? "Image"
+      : activeTab?.kind === "audio"
+        ? "Audio"
+        : activeTab?.kind === "video"
+          ? "Video"
+          : activeTab?.kind === "pdf"
+            ? "PDF"
+            : activeTab
+              ? "Text"
+              : "Ready";
+  const isPreviewTab = Boolean(
+    activeTab && (activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf")
+  );
+  const isEditableTab = Boolean(activeTab && !isPreviewTab && activeTab.kind !== "binary");
   const activeCharCount = activeTabText.length;
   const indexedSearchFiles = React.useMemo(() => (
     indexedFiles.map((file) => ({
@@ -675,6 +725,44 @@ function App() {
       label: activeTab.path || UI_TEXT.statusbar.unopenedFile
     };
   }, [activeTab]);
+  const activePreviewDetailItems = React.useMemo(() => {
+    if (!activeTab || !activePreviewStatus) {
+      return [];
+    }
+
+    if (activeTab.kind === "image") {
+      const items = [];
+      if (activePreviewStatus.width && activePreviewStatus.height) {
+        items.push(`${activePreviewStatus.width} × ${activePreviewStatus.height}`);
+      }
+      if (activePreviewStatus.zoomPercent) {
+        items.push(`缩放 ${activePreviewStatus.zoomPercent}%`);
+      }
+      if (activePreviewStatus.fileSizeBytes > 0) {
+        items.push(formatFileSize(activePreviewStatus.fileSizeBytes));
+      }
+      return items;
+    }
+
+    if (activeTab.kind === "audio" || activeTab.kind === "video") {
+      const items = [activePreviewStatus.playing ? "播放中" : "已暂停"];
+      const current = formatPreviewDuration(activePreviewStatus.currentTime);
+      const total = formatPreviewDuration(activePreviewStatus.duration);
+
+      if (activePreviewStatus.duration > 0) {
+        items.push(`${current} / ${total}`);
+      } else if (activePreviewStatus.currentTime > 0) {
+        items.push(current);
+      }
+      if (activePreviewStatus.fileSizeBytes > 0) {
+        items.push(formatFileSize(activePreviewStatus.fileSizeBytes));
+      }
+
+      return items;
+    }
+
+    return [];
+  }, [activePreviewStatus, activeTab]);
   const activeOutlineItems = activeTab ? outlineMap[activeTab.path] || [] : [];
   const canToggleOutline = activeTab?.kind === "markdown";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
@@ -2204,6 +2292,30 @@ function App() {
                 onOutlineChange={handleOutlineChange}
                 onOutlineApiReady={handleOutlineApiReady}
                 onCommandApiReady={handleCommandApiReady}
+                onPreviewStatusChange={(tabPath, status) => {
+                  setPreviewStatusMap((previous) => {
+                    if (!status) {
+                      if (!(tabPath in previous)) {
+                        return previous;
+                      }
+
+                      const next = { ...previous };
+                      delete next[tabPath];
+                      return next;
+                    }
+
+                    const current = previous[tabPath];
+                    const nextStatus = { ...status };
+                    if (current && JSON.stringify(current) === JSON.stringify(nextStatus)) {
+                      return previous;
+                    }
+
+                    return {
+                      ...previous,
+                      [tabPath]: nextStatus
+                    };
+                  });
+                }}
               />
               {showOutlinePane ? (
                 <aside className="outline-pane" aria-label={UI_TEXT.statusbar.outline}>
@@ -2235,24 +2347,45 @@ function App() {
 
       <footer className="statusbar">
         <div className="statusbar__left">
-          <span className="statusbar__item">{UI_TEXT.statusbar.chars} {activeCharCount}</span>
-          <span className="statusbar__item">{UI_TEXT.statusbar.lines} {activeLineCount}</span>
-          <span className="statusbar__item">{activeIsDirty ? UI_TEXT.statusbar.unsaved : UI_TEXT.statusbar.saved}</span>
+          {isPreviewTab ? (
+            <>
+              <span className="statusbar__item">{activeTabKindLabel}</span>
+              <span className="statusbar__item">只读预览</span>
+              {activePreviewDetailItems.map((item) => (
+                <span key={item} className="statusbar__item">{item}</span>
+              ))}
+            </>
+          ) : (
+            <>
+              <span className="statusbar__item">{UI_TEXT.statusbar.chars} {activeCharCount}</span>
+              <span className="statusbar__item">{UI_TEXT.statusbar.lines} {activeLineCount}</span>
+              <span className="statusbar__item">{activeIsDirty ? UI_TEXT.statusbar.unsaved : UI_TEXT.statusbar.saved}</span>
+            </>
+          )}
           <span className="statusbar__item statusbar__item--path" title={activeStatusPath.title}>{activeStatusPath.label}</span>
         </div>
         <div className="statusbar__right">
-          <button type="button" className="statusbar__item" onClick={() => void saveActiveFileWithToast()}>{UI_TEXT.statusbar.save}</button>
-          <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
-          <button
-            type="button"
-            className={`statusbar__item ${showOutlinePane ? "statusbar__item--accent" : ""}`}
-            disabled={!canToggleOutline}
-            onClick={() => setOutlineOpen((previous) => !previous)}
-          >
-            {UI_TEXT.statusbar.outline}
-          </button>
-          <span className="statusbar__item">{activeTab?.kind === "markdown" ? "Markdown" : activeTab?.kind === "image" ? "Image" : activeTab?.kind === "pdf" ? "PDF" : activeTab ? "Text" : "Ready"}</span>
-          <span className="statusbar__item">UTF-8</span>
+          {isEditableTab ? (
+            <>
+              <button type="button" className="statusbar__item" onClick={() => void saveActiveFileWithToast()}>{UI_TEXT.statusbar.save}</button>
+              <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
+              <button
+                type="button"
+                className={`statusbar__item ${showOutlinePane ? "statusbar__item--accent" : ""}`}
+                disabled={!canToggleOutline}
+                onClick={() => setOutlineOpen((previous) => !previous)}
+              >
+                {UI_TEXT.statusbar.outline}
+              </button>
+              <span className="statusbar__item">{activeTabKindLabel}</span>
+              <span className="statusbar__item">UTF-8</span>
+            </>
+          ) : (
+            <>
+              <span className="statusbar__item">{activeTabKindLabel}</span>
+              <span className="statusbar__item">{activeTab ? "Preview" : "Idle"}</span>
+            </>
+          )}
         </div>
       </footer>
 
