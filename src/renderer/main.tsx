@@ -8,7 +8,7 @@ import { UI_TEXT } from "./ui-text";
 import { ActivityBar } from "./components/ActivityBar";
 import { CommandSearch } from "./components/CommandSearch";
 import { EditorHost } from "./components/EditorHost";
-import type { TiptapOutlineApi, TiptapOutlineItem } from "./components/TiptapTabPane";
+import type { TiptapCommandApi, TiptapOutlineApi, TiptapOutlineItem } from "./components/TiptapTabPane";
 import { FileMenu } from "./components/FileMenu";
 import { Toast } from "./components/Toast";
 import { TreeView } from "./components/TreeView";
@@ -431,6 +431,7 @@ function App() {
   const savedTextMapRef = React.useRef(savedTextMap);
   const markdownDraftMapRef = React.useRef(markdownDraftMap);
   const outlineApiMapRef = React.useRef(new Map<string, TiptapOutlineApi>());
+  const commandApiMapRef = React.useRef(new Map<string, TiptapCommandApi>());
   const { toast, showSuccess, showError } = useToast();
 
   React.useEffect(() => {
@@ -467,6 +468,12 @@ function App() {
     for (const tabPath of outlineApiMapRef.current.keys()) {
       if (!availablePaths.has(tabPath)) {
         outlineApiMapRef.current.delete(tabPath);
+      }
+    }
+
+    for (const tabPath of commandApiMapRef.current.keys()) {
+      if (!availablePaths.has(tabPath)) {
+        commandApiMapRef.current.delete(tabPath);
       }
     }
   }, [tabs]);
@@ -668,6 +675,7 @@ function App() {
   const activeOutlineItems = activeTab ? outlineMap[activeTab.path] || [] : [];
   const canToggleOutline = activeTab?.kind === "markdown";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
+  const activeMarkdownCommands = activeTabPath ? commandApiMapRef.current.get(activeTabPath) || null : null;
   const updateRecentItems = React.useCallback((entry) => {
     setRecentItems((previous) => {
       const next = [entry, ...previous.filter((item) => !(item.kind === entry.kind && item.path === entry.path))];
@@ -1553,6 +1561,15 @@ function App() {
     outlineApiMapRef.current.delete(tabPath);
   }, []);
 
+  const handleCommandApiReady = React.useCallback((tabPath: string, api: TiptapCommandApi | null) => {
+    if (api) {
+      commandApiMapRef.current.set(tabPath, api);
+      return;
+    }
+
+    commandApiMapRef.current.delete(tabPath);
+  }, []);
+
   const handleOutlineItemClick = React.useCallback((itemId: string) => {
     if (!activeTabPath) {
       return;
@@ -2003,6 +2020,13 @@ function App() {
             onSave={saveActiveFileWithToast}
             onSaveAs={saveCurrentAsWithToast}
             onQuit={() => void attemptCloseWindow()}
+            markdownEnabled={activeTab?.kind === "markdown" && Boolean(activeMarkdownCommands)}
+            markdownActions={activeMarkdownCommands ? {
+              onHeading: (level) => activeMarkdownCommands.toggleHeading(level),
+              onHorizontalRule: () => activeMarkdownCommands.insertHorizontalRule(),
+              onTable: () => activeMarkdownCommands.insertTable(),
+              onImage: () => activeMarkdownCommands.insertImageFromFile()
+            } : undefined}
           />
         </div>
 
@@ -2143,6 +2167,7 @@ function App() {
                 onSaveShortcut={() => void saveActiveFileWithToast()}
                 onOutlineChange={handleOutlineChange}
                 onOutlineApiReady={handleOutlineApiReady}
+                onCommandApiReady={handleCommandApiReady}
               />
               {showOutlinePane ? (
                 <aside className="outline-pane" aria-label={UI_TEXT.statusbar.outline}>

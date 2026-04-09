@@ -2,7 +2,12 @@ import React from "react";
 import Image from "@tiptap/extension-image";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Link from "@tiptap/extension-link";
+import Table from "@tiptap/extension-table";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TableRow from "@tiptap/extension-table-row";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import { marked } from "marked";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -25,11 +30,23 @@ export interface TiptapOutlineApi {
   scrollToItem: (itemId: string) => void;
 }
 
+export interface TiptapCommandApi {
+  toggleHeading: (level: number) => void;
+  insertHorizontalRule: () => void;
+  insertTable: () => void;
+  insertImageFromFile: () => Promise<void>;
+}
+
 interface ImagePreviewState {
   pos: number;
   src: string;
   alt: string;
   title: string;
+}
+
+interface StoredSelection {
+  anchor: number;
+  head: number;
 }
 
 function getTextFromNode(node: ProseMirrorNode): string {
@@ -177,6 +194,13 @@ function resolveHtmlImageSources(html: string, tabPath: string): string {
   return document.body.innerHTML;
 }
 
+function clampSelection(selection: StoredSelection, docSize: number): StoredSelection {
+  return {
+    anchor: Math.max(0, Math.min(selection.anchor, docSize)),
+    head: Math.max(0, Math.min(selection.head, docSize))
+  };
+}
+
 interface TiptapTabPaneProps {
   tabPath: string;
   markdown: string;
@@ -186,6 +210,7 @@ interface TiptapTabPaneProps {
   onSaveShortcut?: () => void;
   onOutlineChange?: (tabPath: string, items: TiptapOutlineItem[]) => void;
   onOutlineApiReady?: (tabPath: string, api: TiptapOutlineApi | null) => void;
+  onCommandApiReady?: (tabPath: string, api: TiptapCommandApi | null) => void;
 }
 
 export function TiptapTabPane({
@@ -196,13 +221,15 @@ export function TiptapTabPane({
   onTextChange,
   onSaveShortcut,
   onOutlineChange,
-  onOutlineApiReady
+  onOutlineApiReady,
+  onCommandApiReady
 }: TiptapTabPaneProps) {
   const resolvedHtml = React.useMemo(
     () => resolveHtmlImageSources(draftHtml ?? marked.parse(markdown || ""), tabPath),
     [draftHtml, markdown, tabPath]
   );
   const lastSyncedHtmlRef = React.useRef(resolvedHtml);
+  const lastKnownSelectionRef = React.useRef<StoredSelection | null>(null);
   const [imagePreview, setImagePreview] = React.useState<ImagePreviewState | null>(null);
   const [imageEditSrc, setImageEditSrc] = React.useState("");
   const [imageEditAlt, setImageEditAlt] = React.useState("");
@@ -263,10 +290,20 @@ export function TiptapTabPane({
     onOutlineChange?.(tabPath, getOutlineFromDocument(nextDoc));
   }, [onOutlineChange, tabPath]);
 
+  const rememberSelection = React.useCallback((anchor: number, head: number) => {
+    lastKnownSelectionRef.current = { anchor, head };
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       Image,
+      Table.configure({
+        resizable: false
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Link.configure({
         openOnClick: false,
         autolink: true,
@@ -305,6 +342,18 @@ export function TiptapTabPane({
         text: nextEditor.getText({ blockSeparator: "\n" }),
         isDirty: nextHtml !== lastSyncedHtmlRef.current
       });
+    },
+    onSelectionUpdate: ({ editor: nextEditor }) => {
+      const { anchor, head } = nextEditor.state.selection;
+      rememberSelection(anchor, head);
+    },
+    onFocus: ({ editor: nextEditor }) => {
+      const { anchor, head } = nextEditor.state.selection;
+      rememberSelection(anchor, head);
+    },
+    onBlur: ({ editor: nextEditor }) => {
+      const { anchor, head } = nextEditor.state.selection;
+      rememberSelection(anchor, head);
     }
   });
 
@@ -456,6 +505,81 @@ export function TiptapTabPane({
     const markdownDirectory = getDirectoryPath(tabPath);
     setImageEditSrc(markdownDirectory ? toRelativePath(selectedPath, markdownDirectory) : selectedPath);
   }, [imageEditSrc, tabPath]);
+
+  const handleInsertImageFromFile = React.useCallback(async () => {
+    if (!editor) {
+      return;
+    }
+
+    const storedSelection = lastKnownSelectionRef.current;
+    const selectedPath = await window.desktopApi.pickImageFile(getDirectoryPath(tabPath));
+    if (!selectedPath) {
+      return;
+    }
+
+    const markdownDirectory = getDirectoryPath(tabPath);
+    const nextPath = markdownDirectory ? toRelativePath(selectedPath, markdownDirectory) : selectedPath;
+    const chain = editor.chain().focus();
+
+    if (!storedSelection) {
+      chain.focus("end");
+    } else {
+      const docSize = editor.state.doc.content.size;
+      const { anchor, head } = clampSelection(storedSelection, docSize);
+      chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+    }
+
+    chain.setImage({ src: resolveImageSource(nextPath, tabPath) }).run();
+  }, [editor, tabPath]);
+
+  React.useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    onCommandApiReady?.(tabPath, {
+      toggleHeading: (level: number) => {
+        const chain = editor.chain().focus();
+        const storedSelection = lastKnownSelectionRef.current;
+        if (!storedSelection) {
+          chain.focus("end");
+        } else {
+          const { anchor, head } = clampSelection(storedSelection, editor.state.doc.content.size);
+          chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+        }
+        chain.toggleHeading({ level: Math.max(1, Math.min(6, level)) as 1 | 2 | 3 | 4 | 5 | 6 }).run();
+      },
+      insertHorizontalRule: () => {
+        const chain = editor.chain().focus();
+        const storedSelection = lastKnownSelectionRef.current;
+        if (!storedSelection) {
+          chain.focus("end");
+        } else {
+          const { anchor, head } = clampSelection(storedSelection, editor.state.doc.content.size);
+          chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+        }
+        chain.setHorizontalRule().run();
+      },
+      insertTable: () => {
+        const chain = editor.chain().focus();
+        const storedSelection = lastKnownSelectionRef.current;
+        if (!storedSelection) {
+          chain.focus("end");
+        } else {
+          const { anchor, head } = clampSelection(storedSelection, editor.state.doc.content.size);
+          chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+        }
+        chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+      },
+      insertImageFromFile: async () => {
+        await handleInsertImageFromFile();
+      }
+    });
+
+    return () => {
+      onCommandApiReady?.(tabPath, null);
+    };
+  }, [editor, handleInsertImageFromFile, onCommandApiReady, tabPath]);
 
   return (
     <div className={`editor-shell editor-shell--tiptap ${active ? "" : "editor-shell--hidden"}`}>

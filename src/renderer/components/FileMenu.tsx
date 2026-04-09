@@ -1,5 +1,26 @@
 import React from "react";
 
+interface MarkdownMenuActions {
+  onHeading: (level: number) => void;
+  onHorizontalRule: () => void;
+  onTable: () => void;
+  onImage: () => void | Promise<void>;
+}
+
+interface FileMenuProps {
+  recentItems: Array<{ kind: string; path: string; label: string }>;
+  onNewTab: () => void | Promise<void>;
+  onNewWindow: () => void | Promise<void>;
+  onOpenFile: () => void | Promise<void>;
+  onOpenFolder: () => void | Promise<void>;
+  onOpenRecent: (item: { kind: string; path: string; label: string }) => void | Promise<void>;
+  onSave: () => void | Promise<void>;
+  onSaveAs: () => void | Promise<void>;
+  onQuit: () => void | Promise<void>;
+  markdownEnabled?: boolean;
+  markdownActions?: MarkdownMenuActions;
+}
+
 export function FileMenu({
   recentItems,
   onNewTab,
@@ -9,15 +30,17 @@ export function FileMenu({
   onOpenRecent,
   onSave,
   onSaveAs,
-  onQuit
-}) {
-  const [openMenu, setOpenMenu] = React.useState(null);
+  onQuit,
+  markdownEnabled = false,
+  markdownActions
+}: FileMenuProps) {
+  const [openMenu, setOpenMenu] = React.useState<string | null>(null);
   const [recentOpen, setRecentOpen] = React.useState(false);
-  const menuRef = React.useRef(null);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
-    function handlePointerDown(event) {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
+    function handlePointerDown(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setOpenMenu(null);
         setRecentOpen(false);
       }
@@ -32,7 +55,7 @@ export function FileMenu({
     setRecentOpen(false);
   }, []);
 
-  const handleAction = React.useCallback(async (action) => {
+  const handleAction = React.useCallback(async (action: () => void | Promise<void>) => {
     closeAll();
     await action();
   }, [closeAll]);
@@ -108,6 +131,48 @@ export function FileMenu({
             <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(onQuit)}>
               <span className="menu-dropdown__label">退出</span>
               <span className="menu-dropdown__hint">Alt+F4</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="menu-dropdown">
+        <button
+          type="button"
+          disabled={!markdownEnabled}
+          className={`menu-btn ${openMenu === "markdown" ? "menu-btn--active" : ""}`}
+          onClick={() => {
+            if (!markdownEnabled) {
+              return;
+            }
+
+            setOpenMenu((current) => current === "markdown" ? null : "markdown");
+            setRecentOpen(false);
+          }}
+        >
+          Markdown
+        </button>
+        {openMenu === "markdown" && markdownEnabled && markdownActions ? (
+          <div className="menu-dropdown__panel">
+            {[1, 2, 3, 4, 5].map((level) => (
+              <button
+                key={level}
+                type="button"
+                className="menu-dropdown__item"
+                onClick={() => void handleAction(() => markdownActions.onHeading(level))}
+              >
+                <span className="menu-dropdown__label">{`H${level}`}</span>
+              </button>
+            ))}
+            <div className="menu-dropdown__separator" />
+            <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onHorizontalRule)}>
+              <span className="menu-dropdown__label">分割线</span>
+            </button>
+            <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onTable)}>
+              <span className="menu-dropdown__label">表格</span>
+            </button>
+            <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onImage)}>
+              <span className="menu-dropdown__label">图片</span>
             </button>
           </div>
         ) : null}
