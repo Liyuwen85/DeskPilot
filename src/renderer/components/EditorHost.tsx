@@ -1,4 +1,5 @@
 import React from "react";
+import { ImageTabPane } from "./ImageTabPane";
 import { TextTabPane } from "./TextTabPane";
 import { UI_TEXT } from "../ui-text";
 import type { TiptapCommandApi, TiptapOutlineApi, TiptapOutlineItem } from "./TiptapTabPane";
@@ -12,7 +13,7 @@ interface FileTabLike {
   path: string;
   name?: string;
   content: string;
-  kind: "markdown" | "text" | "binary";
+  kind: "markdown" | "text" | "image" | "binary";
 }
 
 interface MarkdownDraftLike {
@@ -90,6 +91,17 @@ export const EditorHost = React.memo(function EditorHost({
                 onCommandApiReady={onCommandApiReady}
               />
             </React.Suspense>
+          );
+        }
+
+        if (tab.kind === "image") {
+          return (
+            <ImageTabPane
+              key={tab.path}
+              path={tab.content || tab.path}
+              name={tab.name}
+              active={active}
+            />
           );
         }
 

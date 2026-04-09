@@ -96,7 +96,20 @@ function getFileKind(filePath: string): FileKind {
     return "markdown";
   }
 
+  if (isImageFile(filePath)) {
+    return "image";
+  }
+
   return "text";
+}
+
+function isImageFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  const imageExtensions = new Set([
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif", ".ico", ".tif", ".tiff"
+  ]);
+
+  return imageExtensions.has(ext);
 }
 
 function isTextFile(filePath: string): boolean {
@@ -184,10 +197,22 @@ async function readDirectoryChildren(targetPath: string): Promise<TreeNode[]> {
   }));
 }
 
-async function readTextFilePayload(filePath: string): Promise<FileTab> {
+async function readFilePayload(filePath: string): Promise<FileTab> {
   const stat = await fs.stat(filePath);
   if (!stat.isFile()) {
     throw new Error("Target is not a file.");
+  }
+
+  if (isImageFile(filePath)) {
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      content: filePath,
+      encoding: "binary",
+      readonlyHint: true,
+      kind: "image",
+      isTemporary: false
+    };
   }
 
   if (!isTextFile(filePath)) {
@@ -229,7 +254,7 @@ async function loadWorkspaceFromPath(targetPath: string): Promise<WorkspacePaylo
     entryType: "file",
     rootPath,
     tree: await buildDirectoryTree(rootPath),
-    file: await readTextFilePayload(targetPath)
+    file: await readFilePayload(targetPath)
   };
 }
 
@@ -574,7 +599,7 @@ ipcMain.handle("workspace:read-directory", async (_event, directoryPath: string)
 });
 
 ipcMain.handle("viewer:read", async (_event, filePath: string) => {
-  return readTextFilePayload(filePath);
+  return readFilePayload(filePath);
 });
 
 ipcMain.handle("file:create-markdown", async (_event, payload: CreateMarkdownPayload): Promise<CreateMarkdownResult> => {

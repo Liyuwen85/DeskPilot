@@ -541,7 +541,7 @@ function App() {
   }, [searchOpen]);
 
   const getPersistedContentForTab = React.useCallback(async (tab) => {
-    if (!tab || tab.kind === "binary") {
+    if (!tab || tab.kind === "binary" || tab.kind === "image") {
       return "";
     }
 
@@ -614,6 +614,8 @@ function App() {
   const activeTabText = activeTab
     ? activeTab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[activeTab.path] ?? activeTab.content)
+      : activeTab.kind === "image"
+        ? ""
       : normalizeText(tabTextMap[activeTab.path] ?? activeTab.content)
     : "";
   const activeSavedText = activeTab ? normalizeText(savedTextMap[activeTab.path] ?? activeTab.content) : "";
@@ -2214,7 +2216,7 @@ function App() {
           >
             {UI_TEXT.statusbar.outline}
           </button>
-          <span className="statusbar__item">{activeTab?.kind === "markdown" ? "Markdown" : activeTab ? "Text" : "Ready"}</span>
+          <span className="statusbar__item">{activeTab?.kind === "markdown" ? "Markdown" : activeTab?.kind === "image" ? "Image" : activeTab ? "Text" : "Ready"}</span>
           <span className="statusbar__item">UTF-8</span>
         </div>
       </footer>

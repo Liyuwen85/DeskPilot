@@ -7,7 +7,7 @@ export async function saveTabWithPath(filePath, options) {
   } = options;
 
   const tab = findTabByPath(filePath);
-  if (!tab || tab.kind === "binary") {
+  if (!tab || tab.kind === "binary" || tab.kind === "image") {
     return { ok: false };
   }
 
@@ -42,7 +42,7 @@ export async function saveTabAsWithPath(filePath, options) {
   } = options;
 
   const currentTab = findTabByPath(filePath);
-  if (!currentTab || currentTab.kind === "binary") {
+  if (!currentTab || currentTab.kind === "binary" || currentTab.kind === "image") {
     return { ok: false };
   }
 
