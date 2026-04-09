@@ -156,7 +156,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   }, [tab?.path]);
 
   const getPersistedContentForTab = React.useCallback(async (currentTab: any) => {
-    if (!currentTab || currentTab.kind === "binary" || currentTab.kind === "image" || currentTab.kind === "audio" || currentTab.kind === "video" || currentTab.kind === "pdf" || currentTab.kind === "webpage") {
+    if (!currentTab || currentTab.kind === "binary" || currentTab.kind === "image" || currentTab.kind === "audio" || currentTab.kind === "video" || currentTab.kind === "pdf" || currentTab.kind === "webpage" || currentTab.kind === "notebook") {
       return "";
     }
 
@@ -271,7 +271,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const activeTabText = tab
     ? tab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[tab.path] ?? tab.content)
-      : tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage"
+      : tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook"
         ? ""
         : normalizeText(tabTextMap[tab.path] ?? tab.content)
     : "";
@@ -279,6 +279,8 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const activeIsDirty = Boolean(tab) && (
     tab.kind === "markdown"
       ? computeMarkdownTabDirty(tab, savedTextMap, markdownDraftMap, null, normalizeText)
+      : tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook"
+        ? false
       : activeTabText !== activeSavedText
   );
   const activeCharCount = activeTabText.length;
@@ -293,13 +295,15 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
         : tab?.kind === "video"
           ? "Video"
         : tab?.kind === "pdf"
-            ? "PDF"
-            : tab?.kind === "webpage"
-              ? "Web"
-            : tab
-              ? "Text"
-              : "Ready";
-  const isPreviewTab = Boolean(tab && (tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage"));
+          ? "PDF"
+          : tab?.kind === "webpage"
+            ? "Web"
+            : tab?.kind === "notebook"
+              ? "Notebook"
+              : tab
+                ? "Text"
+                : "Ready";
+  const isPreviewTab = Boolean(tab && (tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook"));
   const canToggleOutline = tab?.kind === "markdown";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
   const activePreviewDetailItems = React.useMemo(() => {

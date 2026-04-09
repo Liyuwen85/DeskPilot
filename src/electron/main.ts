@@ -146,6 +146,10 @@ function getFileKind(filePath: string): FileKind {
     return "markdown";
   }
 
+  if (isNotebookFile(filePath)) {
+    return "notebook";
+  }
+
   if (isWebPageFile(filePath)) {
     return "webpage";
   }
@@ -182,6 +186,10 @@ function isPdfFile(filePath: string): boolean {
   return path.extname(filePath).toLowerCase() === ".pdf";
 }
 
+function isNotebookFile(filePath: string): boolean {
+  return path.extname(filePath).toLowerCase() === ".ipynb";
+}
+
 function isWebPageFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   return ext === ".html" || ext === ".htm" || ext === ".xhtml";
@@ -208,7 +216,7 @@ function isVideoFile(filePath: string): boolean {
 function isTextFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   const textExtensions = new Set([
-    ".txt", ".md", ".markdown", ".mdx", ".json", ".js", ".cjs", ".mjs",
+    ".txt", ".md", ".markdown", ".mdx", ".ipynb", ".json", ".js", ".cjs", ".mjs",
     ".ts", ".tsx", ".jsx", ".html", ".css", ".scss", ".sass", ".less",
     ".xml", ".yml", ".yaml", ".toml", ".ini", ".log", ".csv", ".py",
     ".java", ".cpp", ".c", ".h", ".hpp", ".rs", ".go", ".sh", ".ps1",
@@ -380,6 +388,19 @@ async function readFilePayload(filePath: string): Promise<FileTab> {
       encoding: "utf-8",
       readonlyHint: true,
       kind: "webpage",
+      isTemporary: false
+    };
+  }
+
+  if (isNotebookFile(filePath)) {
+    const content = await fs.readFile(filePath, "utf-8");
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      content,
+      encoding: "utf-8",
+      readonlyHint: true,
+      kind: "notebook",
       isTemporary: false
     };
   }
@@ -670,6 +691,7 @@ ipcMain.handle("dialog:open-file", async (event) => {
     properties: ["openFile"],
     filters: [
       { name: "Markdown Files", extensions: ["md", "markdown", "mdx"] },
+      { name: "Jupyter Notebook Files", extensions: ["ipynb"] },
       {
         name: "Other Text Files",
         extensions: [

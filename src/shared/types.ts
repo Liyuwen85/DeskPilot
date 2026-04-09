@@ -1,4 +1,4 @@
-export type FileKind = "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "webpage" | "binary";
+export type FileKind = "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "webpage" | "notebook" | "binary";
 export type TreeNodeType = "directory" | "file";
 export type CloseAction = "save" | "discard" | "cancel";
 export type ToastType = "success" | "error" | "info";

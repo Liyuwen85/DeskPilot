@@ -616,7 +616,7 @@ function App() {
   }, [searchOpen]);
 
   const getPersistedContentForTab = React.useCallback(async (tab) => {
-    if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage") {
+    if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook") {
       return "";
     }
 
@@ -689,7 +689,7 @@ function App() {
   const activeTabText = activeTab
       ? activeTab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[activeTab.path] ?? activeTab.content)
-      : activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf" || activeTab.kind === "webpage"
+      : activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf" || activeTab.kind === "webpage" || activeTab.kind === "notebook"
         ? ""
         : normalizeText(tabTextMap[activeTab.path] ?? activeTab.content)
     : "";
@@ -698,6 +698,8 @@ function App() {
   const activeIsDirty = Boolean(activeTab) && (
     activeTab.kind === "markdown"
       ? isMarkdownTabDirty(activeTab)
+      : activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf" || activeTab.kind === "webpage" || activeTab.kind === "notebook"
+        ? false
       : activeTabText !== activeSavedText
   );
   const activeTabKindLabel = activeTab?.kind === "markdown"
@@ -712,11 +714,13 @@ function App() {
           ? "PDF"
           : activeTab?.kind === "webpage"
             ? "Web"
-            : activeTab
-              ? "Text"
-              : "Ready";
+            : activeTab?.kind === "notebook"
+              ? "Notebook"
+              : activeTab
+                ? "Text"
+                : "Ready";
   const isPreviewTab = Boolean(
-    activeTab && (activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf" || activeTab.kind === "webpage")
+    activeTab && (activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf" || activeTab.kind === "webpage" || activeTab.kind === "notebook")
   );
   const isEditableTab = Boolean(activeTab && !isPreviewTab && activeTab.kind !== "binary");
   const activeCharCount = activeTabText.length;
@@ -2448,6 +2452,8 @@ function App() {
                   <span className="tab__title">{tab.name}</span>
                   {(tab.kind === "markdown"
                     ? isMarkdownTabDirty(tab)
+                    : tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook"
+                      ? false
                     : tabTextMap[tab.path] !== (savedTextMap[tab.path] ?? tab.content ?? "")) ? (
                     <span className="tab__dirty-dot" title={UI_TEXT.tabs.dirtyTitle}>●</span>
                   ) : null}

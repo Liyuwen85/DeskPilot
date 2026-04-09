@@ -15,7 +15,7 @@ export function isMarkdownTabDirty(tab, savedTextMap, markdownDraftMap, serializ
 }
 
 export function isTabDirty(tab, savedTextMap, tabTextMap, markdownDraftMap, serializeMarkdownDraft, normalizeText) {
-  if (!tab || tab.kind === "binary") {
+  if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook") {
     return false;
   }
 

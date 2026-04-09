@@ -1,6 +1,7 @@
 import React from "react";
 import { ImageTabPane } from "./ImageTabPane";
 import { MediaTabPane } from "./MediaTabPane";
+import { NotebookTabPane } from "./NotebookTabPane";
 import { PdfTabPane } from "./PdfTabPane";
 import { TextTabPane } from "./TextTabPane";
 import { WebPageTabPane } from "./WebPageTabPane";
@@ -16,7 +17,7 @@ interface FileTabLike {
   path: string;
   name?: string;
   content: string;
-  kind: "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "webpage" | "binary";
+  kind: "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "webpage" | "notebook" | "binary";
 }
 
 interface MarkdownDraftLike {
@@ -68,7 +69,7 @@ export const EditorHost = React.memo(function EditorHost({
       const availablePaths = new Set(tabs.map((tab) => tab.path));
       const stickyPaths = new Set(
         tabs
-          .filter((tab) => tab.kind === "pdf" || tab.kind === "image" || tab.kind === "webpage")
+          .filter((tab) => tab.kind === "pdf" || tab.kind === "image" || tab.kind === "webpage" || tab.kind === "notebook")
           .map((tab) => tab.path)
       );
       const filtered = previous.filter((path) => availablePaths.has(path));
@@ -144,6 +145,18 @@ export const EditorHost = React.memo(function EditorHost({
             <WebPageTabPane
               key={tab.path}
               path={tab.content || tab.path}
+              name={tab.name}
+              active={active}
+            />
+          );
+        }
+
+        if (tab.kind === "notebook") {
+          return (
+            <NotebookTabPane
+              key={tab.path}
+              tabPath={tab.path}
+              content={tab.content}
               name={tab.name}
               active={active}
             />
