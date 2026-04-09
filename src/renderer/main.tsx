@@ -600,7 +600,7 @@ function App() {
   }, [searchOpen]);
 
   const getPersistedContentForTab = React.useCallback(async (tab) => {
-    if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf") {
+    if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage") {
       return "";
     }
 
@@ -673,9 +673,9 @@ function App() {
   const activeTabText = activeTab
       ? activeTab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[activeTab.path] ?? activeTab.content)
-      : activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf"
+      : activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf" || activeTab.kind === "webpage"
         ? ""
-      : normalizeText(tabTextMap[activeTab.path] ?? activeTab.content)
+        : normalizeText(tabTextMap[activeTab.path] ?? activeTab.content)
     : "";
   const activeSavedText = activeTab ? normalizeText(savedTextMap[activeTab.path] ?? activeTab.content) : "";
   const activePreviewStatus = activeTab ? previewStatusMap[activeTab.path] || null : null;
@@ -692,13 +692,15 @@ function App() {
         ? "Audio"
         : activeTab?.kind === "video"
           ? "Video"
-          : activeTab?.kind === "pdf"
-            ? "PDF"
+        : activeTab?.kind === "pdf"
+          ? "PDF"
+          : activeTab?.kind === "webpage"
+            ? "Web"
             : activeTab
               ? "Text"
               : "Ready";
   const isPreviewTab = Boolean(
-    activeTab && (activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf")
+    activeTab && (activeTab.kind === "image" || activeTab.kind === "audio" || activeTab.kind === "video" || activeTab.kind === "pdf" || activeTab.kind === "webpage")
   );
   const isEditableTab = Boolean(activeTab && !isPreviewTab && activeTab.kind !== "binary");
   const activeCharCount = activeTabText.length;

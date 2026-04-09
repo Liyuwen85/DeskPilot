@@ -3,6 +3,7 @@ import { ImageTabPane } from "./ImageTabPane";
 import { MediaTabPane } from "./MediaTabPane";
 import { PdfTabPane } from "./PdfTabPane";
 import { TextTabPane } from "./TextTabPane";
+import { WebPageTabPane } from "./WebPageTabPane";
 import { UI_TEXT } from "../ui-text";
 import type { TiptapCommandApi, TiptapOutlineApi, TiptapOutlineItem } from "./TiptapTabPane";
 
@@ -15,7 +16,7 @@ interface FileTabLike {
   path: string;
   name?: string;
   content: string;
-  kind: "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "binary";
+  kind: "markdown" | "text" | "image" | "audio" | "video" | "pdf" | "webpage" | "binary";
 }
 
 interface MarkdownDraftLike {
@@ -67,7 +68,7 @@ export const EditorHost = React.memo(function EditorHost({
       const availablePaths = new Set(tabs.map((tab) => tab.path));
       const stickyPaths = new Set(
         tabs
-          .filter((tab) => tab.kind === "pdf" || tab.kind === "image")
+          .filter((tab) => tab.kind === "pdf" || tab.kind === "image" || tab.kind === "webpage")
           .map((tab) => tab.path)
       );
       const filtered = previous.filter((path) => availablePaths.has(path));
@@ -133,6 +134,17 @@ export const EditorHost = React.memo(function EditorHost({
             <PdfTabPane
               key={tab.path}
               path={tab.content || tab.path}
+              active={active}
+            />
+          );
+        }
+
+        if (tab.kind === "webpage") {
+          return (
+            <WebPageTabPane
+              key={tab.path}
+              path={tab.content || tab.path}
+              name={tab.name}
               active={active}
             />
           );

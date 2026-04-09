@@ -145,6 +145,10 @@ function getFileKind(filePath: string): FileKind {
     return "markdown";
   }
 
+  if (isWebPageFile(filePath)) {
+    return "webpage";
+  }
+
   if (isImageFile(filePath)) {
     return "image";
   }
@@ -175,6 +179,11 @@ function isImageFile(filePath: string): boolean {
 
 function isPdfFile(filePath: string): boolean {
   return path.extname(filePath).toLowerCase() === ".pdf";
+}
+
+function isWebPageFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  return ext === ".html" || ext === ".htm" || ext === ".xhtml";
 }
 
 function isAudioFile(filePath: string): boolean {
@@ -330,6 +339,18 @@ async function readFilePayload(filePath: string): Promise<FileTab> {
       encoding: "binary",
       readonlyHint: true,
       kind: "video",
+      isTemporary: false
+    };
+  }
+
+  if (isWebPageFile(filePath)) {
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      content: filePath,
+      encoding: "utf-8",
+      readonlyHint: true,
+      kind: "webpage",
       isTemporary: false
     };
   }

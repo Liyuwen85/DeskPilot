@@ -156,7 +156,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   }, [tab?.path]);
 
   const getPersistedContentForTab = React.useCallback(async (currentTab: any) => {
-    if (!currentTab || currentTab.kind === "binary" || currentTab.kind === "image" || currentTab.kind === "audio" || currentTab.kind === "video" || currentTab.kind === "pdf") {
+    if (!currentTab || currentTab.kind === "binary" || currentTab.kind === "image" || currentTab.kind === "audio" || currentTab.kind === "video" || currentTab.kind === "pdf" || currentTab.kind === "webpage") {
       return "";
     }
 
@@ -271,7 +271,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const activeTabText = tab
     ? tab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[tab.path] ?? tab.content)
-      : tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf"
+      : tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage"
         ? ""
         : normalizeText(tabTextMap[tab.path] ?? tab.content)
     : "";
@@ -292,12 +292,14 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
         ? "Audio"
         : tab?.kind === "video"
           ? "Video"
-          : tab?.kind === "pdf"
+        : tab?.kind === "pdf"
             ? "PDF"
+            : tab?.kind === "webpage"
+              ? "Web"
             : tab
               ? "Text"
               : "Ready";
-  const isPreviewTab = Boolean(tab && (tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf"));
+  const isPreviewTab = Boolean(tab && (tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage"));
   const canToggleOutline = tab?.kind === "markdown";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
   const activePreviewDetailItems = React.useMemo(() => {
