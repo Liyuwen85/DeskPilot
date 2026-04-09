@@ -41,6 +41,7 @@ interface FileMenuProps {
   markdownEnabled?: boolean;
   markdownActions?: MarkdownMenuActions;
   formatActions?: FormatMenuActions;
+  showFileMenu?: boolean;
 }
 
 type MenuKey = "file" | "markdown" | "format";
@@ -57,7 +58,8 @@ export function FileMenu({
   onQuit,
   markdownEnabled = false,
   markdownActions,
-  formatActions
+  formatActions,
+  showFileMenu = true
 }: FileMenuProps) {
   const [openMenu, setOpenMenu] = React.useState<MenuKey | null>(null);
   const [recentOpen, setRecentOpen] = React.useState(false);
@@ -65,11 +67,11 @@ export function FileMenu({
 
   const topLevelMenus = React.useMemo(
     () => [
-      { key: "file" as const, enabled: true },
+      { key: "file" as const, enabled: showFileMenu },
       { key: "markdown" as const, enabled: markdownEnabled },
       { key: "format" as const, enabled: markdownEnabled }
     ],
-    [markdownEnabled]
+    [markdownEnabled, showFileMenu]
   );
 
   const closeAll = React.useCallback(() => {
@@ -298,6 +300,7 @@ export function FileMenu({
 
   return (
     <nav className="titlebar__menu" aria-label="App menu" ref={menuRef}>
+      {showFileMenu ? (
       <div className="menu-dropdown" data-menu="file">
         <button
           type="button"
@@ -427,6 +430,7 @@ export function FileMenu({
           </div>
         ) : null}
       </div>
+      ) : null}
 
       <div className="menu-dropdown" data-menu="markdown">
         <button

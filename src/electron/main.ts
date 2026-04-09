@@ -21,7 +21,13 @@ import type {
   WorkspacePayload
 } from "../shared/types";
 
-type AppWindow = BrowserWindow & { __allowClose?: boolean };
+type AppWindow = BrowserWindow & {
+  __allowClose?: boolean;
+  __windowMode?: WindowMode;
+  __documentPath?: string;
+  __workspaceOwnerId?: number;
+};
+type WindowMode = "workspace" | "document";
 
 const APP_NAME = "DeskPilot";
 const APP_USER_MODEL_ID = "com.doveyh.deskpilot";
@@ -29,7 +35,41 @@ const APP_ICON_PATH = path.join(app.getAppPath(), "screenshot", "deskpilot_logo.
 
 let mainWindow: AppWindow | null = null;
 let pendingLaunchWorkspacePath = "";
+let isAppQuitting = false;
 const isDevRuntime = !app.isPackaged || process.env.DESKPILOT_DEV === "1";
+
+function normalizeDocumentPath(targetPath?: string): string {
+  const rawPath = String(targetPath || "").trim();
+  if (!rawPath) {
+    return "";
+  }
+
+  const normalizedPath = path.normalize(path.resolve(rawPath));
+  return process.platform === "win32" ? normalizedPath.toLowerCase() : normalizedPath;
+}
+
+function findDocumentWindowByPath(targetPath: string): AppWindow | null {
+  const normalizedTargetPath = normalizeDocumentPath(targetPath);
+  if (!normalizedTargetPath) {
+    return null;
+  }
+
+  const matchedWindow = BrowserWindow.getAllWindows().find((candidate) => {
+    const currentWindow = candidate as AppWindow;
+    return currentWindow.__windowMode === "document"
+      && normalizeDocumentPath(currentWindow.__documentPath) === normalizedTargetPath;
+  });
+
+  return (matchedWindow || null) as AppWindow | null;
+}
+
+function focusWindow(window: AppWindow) {
+  if (window.isMinimized()) {
+    window.restore();
+  }
+  window.show();
+  window.focus();
+}
 
 function normalizeCliPath(candidatePath: string): string {
   return path.resolve(candidatePath);
@@ -89,6 +129,14 @@ function sendWorkspacePathToWindow(window: AppWindow | null, targetPath: string)
   }
 
   window.webContents.send("workspace:open-external-path", targetPath);
+}
+
+function getRendererQuery(mode: WindowMode, targetPath?: string) {
+  if (mode !== "document") {
+    return undefined;
+  }
+
+  return targetPath ? { mode, targetPath } : { mode };
 }
 
 function getFileKind(filePath: string): FileKind {
@@ -414,7 +462,8 @@ async function renameOrMove(sourcePath: string, destinationPath: string): Promis
   }
 }
 
-async function createWindow(): Promise<AppWindow> {
+async function createWindow(options: { mode?: WindowMode; targetPath?: string } = {}): Promise<AppWindow> {
+  const mode = options.mode || "workspace";
   Menu.setApplicationMenu(null);
 
   const window = new BrowserWindow({
@@ -435,6 +484,28 @@ async function createWindow(): Promise<AppWindow> {
   }) as AppWindow;
 
   window.__allowClose = false;
+  window.__windowMode = mode;
+  window.__documentPath = options.targetPath;
+  window.__workspaceOwnerId = undefined;
+
+  if (isDevRuntime) {
+    window.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+      const levelLabel = ["log", "warn", "error", "debug", "info"][level] || `level-${level}`;
+      console.log(`[renderer:${mode}:${levelLabel}] ${message} (${sourceId}:${line})`);
+    });
+
+    window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+      console.error(`[window:${mode}] did-fail-load`, { errorCode, errorDescription, validatedURL });
+    });
+
+    window.webContents.on("render-process-gone", (_event, details) => {
+      console.error(`[window:${mode}] render-process-gone`, details);
+    });
+
+    window.webContents.on("unresponsive", () => {
+      console.error(`[window:${mode}] unresponsive`);
+    });
+  }
 
   window.on("close", (event) => {
     if (window.__allowClose) {
@@ -462,8 +533,13 @@ async function createWindow(): Promise<AppWindow> {
     });
   }
 
-  await window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"));
-  mainWindow = window;
+  await window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"), {
+    query: getRendererQuery(mode, options.targetPath)
+  });
+
+  if (mode === "workspace") {
+    mainWindow = window;
+  }
   window.on("closed", () => {
     if (mainWindow === window) {
       mainWindow = null;
@@ -515,6 +591,10 @@ app.whenReady().then(async () => {
       }
     }
   });
+});
+
+app.on("before-quit", () => {
+  isAppQuitting = true;
 });
 
 app.on("window-all-closed", () => {
@@ -897,6 +977,40 @@ ipcMain.handle("window:new", async () => {
   return { ok: true };
 });
 
+ipcMain.handle("window:open-document", async (_event, targetPath: string) => {
+  if (typeof targetPath !== "string" || !targetPath.trim()) {
+    throw new Error("Target path is required.");
+  }
+
+  const normalizedTargetPath = path.resolve(targetPath.trim());
+  const ownerWindow = getWindowFromEvent(_event);
+  const existingWindow = findDocumentWindowByPath(normalizedTargetPath);
+  if (existingWindow) {
+    existingWindow.__workspaceOwnerId = ownerWindow?.webContents.id;
+    existingWindow.__documentPath = normalizedTargetPath;
+    focusWindow(existingWindow);
+    return { ok: true };
+  }
+
+  const documentWindow = await createWindow({
+    mode: "document",
+    targetPath: normalizedTargetPath
+  });
+  documentWindow.__workspaceOwnerId = ownerWindow?.webContents.id;
+  return { ok: true };
+});
+
+ipcMain.on("window:update-document-state", (event, payload: { targetPath?: string }) => {
+  const currentWindow = getWindowFromSender(event.sender);
+  if (!currentWindow || currentWindow.__windowMode !== "document") {
+    return;
+  }
+
+  if (typeof payload?.targetPath === "string" && payload.targetPath.trim()) {
+    currentWindow.__documentPath = path.resolve(payload.targetPath.trim());
+  }
+});
+
 ipcMain.on("app:quit", () => {
   const windows = BrowserWindow.getAllWindows() as AppWindow[];
   if (windows.length === 0) {
@@ -938,6 +1052,31 @@ ipcMain.on("window:confirm-close", (event) => {
 
   currentWindow.__allowClose = true;
   currentWindow.close();
+});
+
+app.on("browser-window-created", (_event, window) => {
+  const currentWindow = window as AppWindow;
+  currentWindow.on("closed", () => {
+    if (isAppQuitting || currentWindow.__windowMode !== "document" || !currentWindow.__documentPath) {
+      return;
+    }
+
+    const ownerWindow = (BrowserWindow.getAllWindows().find(
+      (candidate) => candidate.webContents.id === currentWindow.__workspaceOwnerId
+    ) || null) as AppWindow | null;
+    const targetWindow = ownerWindow && !ownerWindow.isDestroyed()
+      ? ownerWindow
+      : mainWindow && !mainWindow.isDestroyed()
+        ? mainWindow
+        : null;
+
+    if (!targetWindow) {
+      return;
+    }
+
+    focusWindow(targetWindow);
+    targetWindow.webContents.send("workspace:restore-document-tab", currentWindow.__documentPath);
+  });
 });
 
 ipcMain.handle("window:is-maximized", (event) => {

@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld("desktopApi", {
   openFileDialog: () => ipcRenderer.invoke("dialog:open-file"),
   pickImageFile: (defaultDirectory?: string) => ipcRenderer.invoke("dialog:pick-image-file", defaultDirectory),
   getLaunchWorkspacePath: () => ipcRenderer.invoke("app:get-launch-workspace-path"),
+  openDocumentWindow: (targetPath: string) => ipcRenderer.invoke("window:open-document", targetPath),
+  updateDocumentWindowState: (payload: { targetPath: string }) => ipcRenderer.send("window:update-document-state", payload),
   confirmCloseTab: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-tab", payload),
   confirmCloseWindow: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-window", payload),
   openWorkspacePath: (targetPath: string) => ipcRenderer.invoke("workspace:open-path", targetPath),
@@ -41,6 +43,11 @@ contextBridge.exposeInMainWorld("desktopApi", {
     const wrapped = (_event: Electron.IpcRendererEvent, targetPath: string) => listener(targetPath);
     ipcRenderer.on("workspace:open-external-path", wrapped);
     return () => ipcRenderer.removeListener("workspace:open-external-path", wrapped);
+  },
+  onRestoreDocumentTab: (listener: (targetPath: string) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, targetPath: string) => listener(targetPath);
+    ipcRenderer.on("workspace:restore-document-tab", wrapped);
+    return () => ipcRenderer.removeListener("workspace:restore-document-tab", wrapped);
   },
   confirmWindowClose: () => ipcRenderer.send("window:confirm-close"),
   newWindow: () => ipcRenderer.invoke("window:new"),

@@ -119,6 +119,8 @@ export interface DesktopApi {
   openFileDialog: () => Promise<WorkspacePayload | null>;
   pickImageFile: (defaultDirectory?: string) => Promise<string | null>;
   getLaunchWorkspacePath: () => Promise<string>;
+  openDocumentWindow: (targetPath: string) => Promise<{ ok: boolean }>;
+  updateDocumentWindowState: (payload: { targetPath: string }) => void;
   confirmCloseTab: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   confirmCloseWindow: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   openWorkspacePath: (targetPath: string) => Promise<WorkspacePayload>;
@@ -138,6 +140,7 @@ export interface DesktopApi {
   exportFile: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;
   onRequestWindowClose: (listener: () => void) => () => void;
   onOpenWorkspacePath: (listener: (targetPath: string) => void) => () => void;
+  onRestoreDocumentTab: (listener: (targetPath: string) => void) => () => void;
   confirmWindowClose: () => void;
   newWindow: () => Promise<{ ok: boolean }>;
   quitApp: () => void;

@@ -12,9 +12,28 @@ import type { TiptapCommandApi, TiptapOutlineApi, TiptapOutlineItem } from "./co
 import { FileMenu } from "./components/FileMenu";
 import { Toast } from "./components/Toast";
 import { TreeView } from "./components/TreeView";
+import { DocumentApp } from "./DocumentApp";
 import { useToast } from "./use-toast";
 import "katex/dist/katex.min.css";
 import "./styles.css";
+
+const rendererSearchParams = new URLSearchParams(window.location.search);
+const rendererMode = rendererSearchParams.get("mode");
+const documentTargetPath = rendererSearchParams.get("targetPath") || "";
+
+console.log("[renderer:boot]", {
+  href: window.location.href,
+  mode: rendererMode,
+  targetPath: documentTargetPath
+});
+
+window.addEventListener("error", (event) => {
+  console.error("[renderer:error]", event.message, event.filename, event.lineno, event.colno, event.error);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  console.error("[renderer:unhandledrejection]", event.reason);
+});
 
 const RECENT_ITEMS_KEY = "deskpilot:recent-items";
 const SIDEBAR_WIDTH_KEY = "deskpilot:sidebar-width";
@@ -444,6 +463,7 @@ function App() {
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outlineMap, setOutlineMap] = React.useState<Record<string, TiptapOutlineItem[]>>({});
   const [previewStatusMap, setPreviewStatusMap] = React.useState<Record<string, any>>({});
+  const [detachedDocumentPaths, setDetachedDocumentPaths] = React.useState<Set<string>>(() => new Set<string>());
   const searchInputRef = React.useRef(null);
   const searchBoxRef = React.useRef(null);
   const treeRef = React.useRef(tree);
@@ -459,6 +479,7 @@ function App() {
   const tabTextMapRef = React.useRef(tabTextMap);
   const savedTextMapRef = React.useRef(savedTextMap);
   const markdownDraftMapRef = React.useRef(markdownDraftMap);
+  const detachedDocumentPathsRef = React.useRef(detachedDocumentPaths);
   const outlineApiMapRef = React.useRef(new Map<string, TiptapOutlineApi>());
   const commandApiMapRef = React.useRef(new Map<string, TiptapCommandApi>());
   const { toast, showSuccess, showError } = useToast();
@@ -486,6 +507,10 @@ function App() {
   React.useEffect(() => {
     markdownDraftMapRef.current = markdownDraftMap;
   }, [markdownDraftMap]);
+
+  React.useEffect(() => {
+    detachedDocumentPathsRef.current = detachedDocumentPaths;
+  }, [detachedDocumentPaths]);
 
   React.useEffect(() => {
     const availablePaths = new Set(tabs.map((tab) => tab.path));
@@ -927,6 +952,12 @@ function App() {
       return;
     }
 
+    if (detachedDocumentPathsRef.current.has(file.path)) {
+      void window.desktopApi.openDocumentWindow(file.path);
+      setSelectedTreePath(file.path);
+      return;
+    }
+
     const content = normalizeText(file.content);
 
     setTabs((previous) => {
@@ -963,6 +994,40 @@ function App() {
     });
     setActiveTabPath(file.path);
     setSelectedTreePath(null);
+  }, []);
+
+  const markDocumentPathDetached = React.useCallback((filePath) => {
+    if (!filePath) {
+      return;
+    }
+
+    setDetachedDocumentPaths((previous) => {
+      if (previous.has(filePath)) {
+        detachedDocumentPathsRef.current = previous;
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(filePath);
+      detachedDocumentPathsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const clearDetachedDocumentPath = React.useCallback((filePath) => {
+    if (!filePath) {
+      return;
+    }
+
+    setDetachedDocumentPaths((previous) => {
+      if (!previous.has(filePath)) {
+        detachedDocumentPathsRef.current = previous;
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(filePath);
+      detachedDocumentPathsRef.current = next;
+      return next;
+    });
   }, []);
 
   const restoreSessionTabs = React.useCallback((files, activePath) => {
@@ -1108,6 +1173,12 @@ function App() {
   }, [restoreSessionSnapshot, rootPath, tabs.length]);
 
   const openFile = React.useCallback(async (filePath) => {
+    if (detachedDocumentPathsRef.current.has(filePath)) {
+      await window.desktopApi.openDocumentWindow(filePath);
+      setSelectedTreePath(filePath);
+      return;
+    }
+
     const existing = tabsRef.current.find((tab) => tab.path === filePath);
     if (existing) {
       setActiveTabPath(filePath);
@@ -1117,6 +1188,21 @@ function App() {
     const file = await window.desktopApi.readFile(filePath);
     openFilePayload(file);
   }, [openFilePayload]);
+
+  React.useEffect(() => {
+    return window.desktopApi.onRestoreDocumentTab((targetPath) => {
+      if (!targetPath) {
+        return;
+      }
+
+      clearDetachedDocumentPath(targetPath);
+      void window.desktopApi.readFile(targetPath).then((file) => {
+        openFilePayload(file);
+      }).catch(() => {
+        showError("无法恢复独立窗口中的文档标签");
+      });
+    });
+  }, [clearDetachedDocumentPath, openFilePayload, showError]);
 
   React.useEffect(() => {
     const pendingTabPaths = pendingRestoreTabPathsRef.current;
@@ -1557,6 +1643,47 @@ function App() {
       showError(UI_TEXT.toast.copyError);
     }
   }, [showError, showSuccess]);
+
+  const moveTabToDocumentWindow = React.useCallback(async (filePath) => {
+    const tab = tabsRef.current.find((item) => item.path === filePath);
+    if (!tab || String(tab.path).startsWith("untitled:")) {
+      return { ok: false, reason: "missing-tab" };
+    }
+
+    let targetPath = filePath;
+
+    if (isTabDirty(tab)) {
+      const decision = await window.desktopApi.confirmCloseTab({
+        fileName: tab.name
+      });
+
+      if (decision?.action === "cancel") {
+        return { ok: false, reason: "cancelled" };
+      }
+
+      if (decision?.action === "save") {
+        const saveResult = await saveTabByPath(filePath);
+        if (saveResult.requiresSaveAs) {
+          const saveAsResult = await saveTabAsByPath(filePath);
+          if (!saveAsResult?.ok || !saveAsResult.filePath) {
+            return { ok: false, reason: "save-as-cancelled" };
+          }
+          targetPath = saveAsResult.filePath;
+        } else if (!saveResult.ok) {
+          return { ok: false, reason: "save-failed" };
+        }
+      }
+    }
+
+    const openResult = await window.desktopApi.openDocumentWindow(targetPath);
+    if (!openResult?.ok) {
+      return { ok: false, reason: "open-window-failed" };
+    }
+
+    removeTabByPath(targetPath);
+    markDocumentPathDetached(targetPath);
+    return { ok: true, filePath: targetPath };
+  }, [isTabDirty, markDocumentPathDetached, removeTabByPath, saveTabAsByPath, saveTabByPath]);
 
   const moveTab = React.useCallback((sourcePath, targetPath, position) => {
     if (!sourcePath || !targetPath || sourcePath === targetPath) {
@@ -2482,6 +2609,21 @@ function App() {
               }
               const targetPath = tabContextMenu.path;
               setTabContextMenu(null);
+              void moveTabToDocumentWindow(targetPath);
+            }}
+          >
+            在新窗口打开
+          </button>
+          <button
+            type="button"
+            className="tab-context-menu__item"
+            disabled={!contextMenuTab || String(contextMenuTab.path).startsWith("untitled:")}
+            onClick={() => {
+              if (!contextMenuTab || String(contextMenuTab.path).startsWith("untitled:")) {
+                return;
+              }
+              const targetPath = tabContextMenu.path;
+              setTabContextMenu(null);
               void copyTabPath(targetPath);
             }}
           >
@@ -2546,6 +2688,10 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    {rendererMode === "document" ? (
+      <DocumentApp targetPath={documentTargetPath} />
+    ) : (
+      <App />
+    )}
   </React.StrictMode>
 );
