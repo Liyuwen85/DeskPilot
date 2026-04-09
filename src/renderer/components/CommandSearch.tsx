@@ -16,6 +16,7 @@ interface CommandSearchProps {
   searchBoxRef: React.RefObject<HTMLDivElement>;
   searchResults: SearchResultItem[];
   onOpen: () => void;
+  onClose: () => void;
   onQueryChange: (value: string) => void;
   onSelect: (path: string) => void;
 }
@@ -27,6 +28,7 @@ export const CommandSearch = React.memo(function CommandSearch({
   searchBoxRef,
   searchResults,
   onOpen,
+  onClose,
   onQueryChange,
   onSelect
 }: CommandSearchProps) {
@@ -49,6 +51,13 @@ export const CommandSearch = React.memo(function CommandSearch({
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder={UI_TEXT.search.inputPlaceholder}
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose();
+              }
+            }}
           />
         ) : (
           <span className="command-box__placeholder">{UI_TEXT.search.placeholder}</span>

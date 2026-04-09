@@ -678,7 +678,22 @@ function App() {
   const activeOutlineItems = activeTab ? outlineMap[activeTab.path] || [] : [];
   const canToggleOutline = activeTab?.kind === "markdown";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
-  const activeMarkdownCommands = activeTabPath ? commandApiMapRef.current.get(activeTabPath) || null : null;
+  // Read markdown commands at click time instead of render time. The command
+  // map lives in a ref, so caching a snapshot here can leave menus bound to a
+  // stale or missing editor API after tab/editor lifecycle changes.
+  const runActiveMarkdownCommand = React.useCallback((runner: (api: TiptapCommandApi) => void | Promise<void>) => {
+    const currentPath = activeTabPathRef.current;
+    if (!currentPath) {
+      return;
+    }
+
+    const api = commandApiMapRef.current.get(currentPath);
+    if (!api) {
+      return;
+    }
+
+    return runner(api);
+  }, []);
   const updateRecentItems = React.useCallback((entry) => {
     setRecentItems((previous) => {
       const next = [entry, ...previous.filter((item) => !(item.kind === entry.kind && item.path === entry.path))];
@@ -2023,13 +2038,26 @@ function App() {
             onSave={saveActiveFileWithToast}
             onSaveAs={saveCurrentAsWithToast}
             onQuit={() => void attemptCloseWindow()}
-            markdownEnabled={activeTab?.kind === "markdown" && Boolean(activeMarkdownCommands)}
-            markdownActions={activeMarkdownCommands ? {
-              onHeading: (level) => activeMarkdownCommands.toggleHeading(level),
-              onHorizontalRule: () => activeMarkdownCommands.insertHorizontalRule(),
-              onInlineMath: () => activeMarkdownCommands.insertInlineMath(),
-              onBlockMath: () => activeMarkdownCommands.insertBlockMath(),
-              onImage: () => activeMarkdownCommands.insertImageFromFile()
+            markdownEnabled={activeTab?.kind === "markdown"}
+            formatActions={activeTab?.kind === "markdown" ? {
+              onBold: () => runActiveMarkdownCommand((api) => api.toggleBold()),
+              onItalic: () => runActiveMarkdownCommand((api) => api.toggleItalic()),
+              onUnderline: () => runActiveMarkdownCommand((api) => api.toggleUnderline()),
+              onStrike: () => runActiveMarkdownCommand((api) => api.toggleStrike()),
+              onInlineCode: () => runActiveMarkdownCommand((api) => api.toggleInlineCode()),
+              onBulletList: () => runActiveMarkdownCommand((api) => api.toggleBulletList()),
+              onOrderedList: () => runActiveMarkdownCommand((api) => api.toggleOrderedList()),
+              onTaskList: () => runActiveMarkdownCommand((api) => api.toggleTaskList()),
+              onBlockquote: () => runActiveMarkdownCommand((api) => api.toggleBlockquote()),
+              onCodeBlock: () => runActiveMarkdownCommand((api) => api.toggleCodeBlock()),
+              onClearFormatting: () => runActiveMarkdownCommand((api) => api.clearFormatting())
+            } : undefined}
+            markdownActions={activeTab?.kind === "markdown" ? {
+              onHeading: (level) => runActiveMarkdownCommand((api) => api.toggleHeading(level)),
+              onHorizontalRule: () => runActiveMarkdownCommand((api) => api.insertHorizontalRule()),
+              onInlineMath: () => runActiveMarkdownCommand((api) => api.insertInlineMath()),
+              onBlockMath: () => runActiveMarkdownCommand((api) => api.insertBlockMath()),
+              onImage: () => runActiveMarkdownCommand((api) => api.insertImageFromFile())
             } : undefined}
           />
         </div>
@@ -2042,6 +2070,10 @@ function App() {
             searchBoxRef={searchBoxRef}
             searchResults={searchResults}
             onOpen={() => setSearchOpen(true)}
+            onClose={() => {
+              setSearchOpen(false);
+              setSearchQuery("");
+            }}
             onQueryChange={setSearchQuery}
             onSelect={(path) => void handleSearchSelect(path)}
           />
