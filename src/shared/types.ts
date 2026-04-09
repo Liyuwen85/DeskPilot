@@ -140,6 +140,7 @@ export interface DesktopApi {
   deletePath: (payload: DeletePathPayload) => Promise<WorkspaceMutationResult>;
   revealInExplorer: (targetPath: string) => Promise<{ ok: boolean }>;
   openExternalUrl: (targetUrl: string) => Promise<{ ok: boolean }>;
+  writeClipboardText: (text: string) => Promise<{ ok: boolean }>;
   saveFile: (payload: SaveFilePayload) => Promise<SaveFileResult>;
   saveBinaryFile: (payload: SaveBinaryFilePayload) => Promise<SaveFileResult>;
   saveFileAs: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;

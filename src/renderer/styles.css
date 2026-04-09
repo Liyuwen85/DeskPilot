@@ -1256,6 +1256,7 @@ input {
 }
 
 .editor-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -1363,8 +1364,9 @@ input {
 }
 
 .editor-content--tiptap .ProseMirror pre {
+  position: relative;
   margin: 1em 0 1.1em;
-  padding: 16px 18px;
+  padding: 42px 18px 16px;
   overflow: auto;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 5px;
@@ -1376,6 +1378,41 @@ input {
 .editor-content--tiptap .ProseMirror pre code {
   padding: 0;
   background: transparent;
+}
+
+.editor-body .code-copy-button {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 3;
+  padding: 4px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.editor-body .code-copy-button:hover {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(255, 255, 255, 0.98);
+  color: #0f172a;
+}
+
+.editor-body .code-copy-hint {
+  position: absolute;
+  z-index: 3;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .editor-content--tiptap .ProseMirror .is-editor-empty:first-child::before {

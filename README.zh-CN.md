@@ -1,6 +1,6 @@
 # DeskPilot
 
-DeskPilot 是一个简单的 Markdown 编辑器。
+DeskPilot 是一个简单的、轻量的 Markdown 编辑器。
 
 ## 截图
 
@@ -12,6 +12,7 @@ DeskPilot 是一个简单的 Markdown 编辑器。
 - [x] 编辑其它类型文本
 - [x] 预览网页/pdf/媒体文件等
 - [ ] 菜单功能实现
+- [ ] 多语言支持
 - [ ] 增强全文检索（RetrievalBoost）
 - [ ] 添加AI助手
 - [ ] 调用本地模型

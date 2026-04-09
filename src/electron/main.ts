@@ -1,7 +1,7 @@
 import path from "node:path";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type {
   ConfirmClosePayload,
   ConfirmCloseResult,
@@ -956,6 +956,15 @@ ipcMain.handle("shell:open-external-url", async (_event, targetUrl: string) => {
   } catch {
     return { ok: false };
   }
+});
+
+ipcMain.handle("clipboard:write-text", async (_event, text: string) => {
+  if (typeof text !== "string") {
+    return { ok: false };
+  }
+
+  clipboard.writeText(text);
+  return { ok: true };
 });
 
 ipcMain.handle("file:save", async (_event, payload: SaveFilePayload): Promise<SaveFileResult> => {

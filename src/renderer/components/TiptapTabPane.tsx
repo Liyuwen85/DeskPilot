@@ -71,6 +71,27 @@ interface MathSelectionTarget {
   pos: number;
 }
 
+interface CodeBlockOverlayItem {
+  id: string;
+  top: number;
+  left: number;
+  text: string;
+}
+
+function getElementOffsetWithinAncestor(element: HTMLElement, ancestor: HTMLElement) {
+  let top = 0;
+  let left = 0;
+  let current: HTMLElement | null = element;
+
+  while (current && current !== ancestor) {
+    top += current.offsetTop;
+    left += current.offsetLeft;
+    current = current.offsetParent as HTMLElement | null;
+  }
+
+  return { top, left };
+}
+
 function getTextFromNode(node: ProseMirrorNode): string {
   const parts: string[] = [];
   node.descendants((descendant) => {
@@ -280,6 +301,7 @@ export function TiptapTabPane({
   const lastSyncedHtmlRef = React.useRef(resolvedHtml);
   const lastSyncedDocJsonRef = React.useRef<string>("");
   const isHydratingRef = React.useRef(true);
+  const editorRef = React.useRef<any>(null);
   const lastKnownSelectionRef = React.useRef<StoredSelection | null>(null);
   const [imagePreview, setImagePreview] = React.useState<ImagePreviewState | null>(null);
   const [imageEditSrc, setImageEditSrc] = React.useState("");
@@ -287,6 +309,11 @@ export function TiptapTabPane({
   const [imageEditTitle, setImageEditTitle] = React.useState("");
   const [mathEditor, setMathEditor] = React.useState<MathEditorState | null>(null);
   const [mathLatex, setMathLatex] = React.useState("");
+  const [copiedCodeBlockId, setCopiedCodeBlockId] = React.useState<string | null>(null);
+  const [copyHintId, setCopyHintId] = React.useState<string | null>(null);
+  const [codeBlockOverlays, setCodeBlockOverlays] = React.useState<CodeBlockOverlayItem[]>([]);
+  const copyResetTimerRef = React.useRef<number | null>(null);
+  const editorBodyRef = React.useRef<HTMLDivElement | null>(null);
 
   const syncLastSavedSnapshot = React.useCallback((nextEditor: { getHTML: () => string; getJSON: () => unknown }) => {
     lastSyncedHtmlRef.current = nextEditor.getHTML();
@@ -317,6 +344,66 @@ export function TiptapTabPane({
     event.stopPropagation();
     void window.desktopApi.openExternalUrl(linkElement.href);
   }, []);
+
+  const syncCodeBlockCopyButtons = React.useCallback(() => {
+    const rootElement = editorRef.current?.view.dom;
+    if (!(rootElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const codeBlocks = Array.from(rootElement.querySelectorAll("pre"));
+    codeBlocks.forEach((block, index) => {
+      if (!(block instanceof HTMLElement)) {
+        return;
+      }
+
+      const blockId = block.dataset.codeCopyId || `code-block-${index + 1}`;
+      block.dataset.codeCopyId = blockId;
+
+      let button = block.querySelector(".code-copy-button");
+      if (!(button instanceof HTMLButtonElement)) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "code-copy-button";
+        button.dataset.codeCopyTarget = blockId;
+        block.appendChild(button);
+      }
+
+      button.textContent = copiedCodeBlockId === blockId ? "已复制" : "复制";
+    });
+  }, [copiedCodeBlockId]);
+
+  const handleCopyCodeBlock = React.useCallback(async (codeBlockId: string) => {
+    if (!codeBlockId) {
+      return;
+    }
+
+    const targetOverlay = codeBlockOverlays.find((item) => item.id === codeBlockId);
+    const text = String(targetOverlay?.text || "").trimEnd();
+    if (!text) {
+      return;
+    }
+
+    try {
+      const result = await window.desktopApi.writeClipboardText(text);
+      if (!result?.ok) {
+        await navigator.clipboard.writeText(text);
+      }
+
+      setCopiedCodeBlockId(codeBlockId);
+      setCopyHintId(codeBlockId);
+      if (copyResetTimerRef.current) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = window.setTimeout(() => {
+        setCopiedCodeBlockId((current) => (current === codeBlockId ? null : current));
+        setCopyHintId((current) => (current === codeBlockId ? null : current));
+        copyResetTimerRef.current = null;
+      }, 1600);
+    } catch {
+      setCopyHintId(null);
+    }
+  }, [codeBlockOverlays]);
 
   const closeImagePreview = React.useCallback(() => {
     setImagePreview(null);
@@ -356,6 +443,14 @@ export function TiptapTabPane({
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [closeImagePreview, closeMathEditor, imagePreview, mathEditor]);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
 
   const emitOutline = React.useCallback((nextDoc: ProseMirrorNode) => {
     onOutlineChange?.(tabPath, getOutlineFromDocument(nextDoc));
@@ -454,6 +549,7 @@ export function TiptapTabPane({
       const nextHtml = nextEditor.getHTML();
       const nextDocJson = JSON.stringify(nextEditor.getJSON());
       emitOutline(nextEditor.state.doc);
+      queueMicrotask(() => refreshCodeBlockOverlays());
       onTextChange(tabPath, {
         html: nextHtml,
         text: nextEditor.getText({ blockSeparator: "\n" }),
@@ -463,6 +559,7 @@ export function TiptapTabPane({
     onCreate: ({ editor: nextEditor }) => {
       syncLastSavedSnapshot(nextEditor);
       isHydratingRef.current = false;
+      queueMicrotask(() => refreshCodeBlockOverlays());
     },
     onSelectionUpdate: ({ editor: nextEditor }) => {
       const { anchor, head } = nextEditor.state.selection;
@@ -477,6 +574,50 @@ export function TiptapTabPane({
       rememberSelection(anchor, head);
     }
   });
+
+  React.useEffect(() => {
+    editorRef.current = editor;
+    return () => {
+      if (editorRef.current === editor) {
+        editorRef.current = null;
+      }
+    };
+  }, [editor]);
+
+  const refreshCodeBlockOverlays = React.useCallback(() => {
+    const rootElement = editorRef.current?.view.dom;
+    const bodyElement = editorBodyRef.current;
+    if (!(rootElement instanceof HTMLElement) || !(bodyElement instanceof HTMLElement)) {
+      setCodeBlockOverlays([]);
+      return;
+    }
+
+    const codeBlocks = Array.from(rootElement.querySelectorAll("pre"));
+    const nextOverlays: CodeBlockOverlayItem[] = [];
+
+    codeBlocks.forEach((block, index) => {
+      if (!(block instanceof HTMLElement)) {
+        return;
+      }
+
+      const blockId = block.dataset.codeCopyId || `code-block-${index + 1}`;
+      block.dataset.codeCopyId = blockId;
+      const offset = getElementOffsetWithinAncestor(block, bodyElement);
+      const codeElement = block.querySelector("code");
+      const text = (codeElement?.textContent || block.textContent || "").trimEnd();
+
+      nextOverlays.push({
+        id: blockId,
+        top: Math.max(8, offset.top + 10),
+        left: Math.max(56, offset.left + block.offsetWidth - 12),
+        text
+      });
+    });
+
+    setCodeBlockOverlays((previous) => (
+      JSON.stringify(previous) === JSON.stringify(nextOverlays) ? previous : nextOverlays
+    ));
+  }, []);
 
   const getCommandChain = React.useCallback(() => {
     if (!editor) {
@@ -530,6 +671,13 @@ export function TiptapTabPane({
 
   const handleBodyClickCapture = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target;
+    if (target instanceof HTMLElement) {
+      const copyButton = target.closest(".code-copy-button");
+      if (copyButton instanceof HTMLButtonElement) {
+        return;
+      }
+    }
+
     if (target instanceof HTMLElement && target.closest("img")) {
       handleImageClickCapture(event);
       return;
@@ -538,12 +686,21 @@ export function TiptapTabPane({
     handleLinkClickCapture(event);
   }, [handleImageClickCapture, handleLinkClickCapture]);
 
+  const handleBodyMouseDownCapture = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest(".code-copy-button")) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, []);
+
   React.useEffect(() => {
     if (!editor) {
       return;
     }
 
     emitOutline(editor.state.doc);
+    queueMicrotask(() => refreshCodeBlockOverlays());
     onOutlineApiReady?.(tabPath, {
       scrollToItem: (itemId: string) => {
         const targetPos = Number(String(itemId).replace("heading-", ""));
@@ -567,7 +724,7 @@ export function TiptapTabPane({
     return () => {
       onOutlineApiReady?.(tabPath, null);
     };
-  }, [editor, emitOutline, onOutlineApiReady, tabPath]);
+  }, [editor, emitOutline, onOutlineApiReady, refreshCodeBlockOverlays, tabPath]);
 
   React.useEffect(() => {
     if (!editor) {
@@ -583,6 +740,30 @@ export function TiptapTabPane({
       return;
     }
 
+    const rootElement = editor.view.dom;
+    if (!(rootElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const handleLayoutChange = () => {
+      refreshCodeBlockOverlays();
+    };
+
+    rootElement.addEventListener("scroll", handleLayoutChange, { passive: true });
+    window.addEventListener("resize", handleLayoutChange);
+    queueMicrotask(handleLayoutChange);
+
+    return () => {
+      rootElement.removeEventListener("scroll", handleLayoutChange);
+      window.removeEventListener("resize", handleLayoutChange);
+    };
+  }, [editor, refreshCodeBlockOverlays]);
+
+  React.useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
     if (resolvedHtml === lastSyncedHtmlRef.current) {
       return;
     }
@@ -592,7 +773,8 @@ export function TiptapTabPane({
     syncLastSavedSnapshot(editor);
     isHydratingRef.current = false;
     emitOutline(editor.state.doc);
-  }, [editor, emitOutline, resolvedHtml, syncLastSavedSnapshot]);
+    queueMicrotask(() => refreshCodeBlockOverlays());
+  }, [editor, emitOutline, refreshCodeBlockOverlays, resolvedHtml, syncLastSavedSnapshot]);
 
   React.useEffect(() => {
     return () => {
@@ -847,10 +1029,49 @@ export function TiptapTabPane({
   return (
     <div className={`editor-shell editor-shell--tiptap ${active ? "" : "editor-shell--hidden"}`}>
       <div
+        ref={editorBodyRef}
         className="editor-body"
+        onMouseDownCapture={handleBodyMouseDownCapture}
         onClickCapture={handleBodyClickCapture}
         onKeyDownCapture={handleSaveKeyDownCapture}
       >
+        {codeBlockOverlays.map((item) => (
+          <React.Fragment key={item.id}>
+            <button
+              type="button"
+            className="code-copy-button"
+            style={{
+              top: `${item.top}px`,
+              left: `${item.left}px`,
+              transform: "translateX(-100%)"
+            }}
+            data-code-copy-target={item.id}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void handleCopyCodeBlock(item.id);
+              }}
+            >
+              {copiedCodeBlockId === item.id ? "已复制" : "复制"}
+            </button>
+            {copyHintId === item.id ? (
+              <div
+                className="code-copy-hint"
+                style={{
+                  top: `${item.top + 34}px`,
+                  left: `${item.left}px`,
+                  transform: "translateX(-100%)"
+                }}
+              >
+                代码已复制
+              </div>
+            ) : null}
+          </React.Fragment>
+        ))}
         <EditorContent editor={editor} className="editor-content editor-content--tiptap" />
       </div>
       {imagePreview ? (

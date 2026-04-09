@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   deletePath: (payload: DeletePathPayload) => ipcRenderer.invoke("file:delete", payload),
   revealInExplorer: (targetPath: string) => ipcRenderer.invoke("file:reveal-in-explorer", targetPath),
   openExternalUrl: (targetUrl: string) => ipcRenderer.invoke("shell:open-external-url", targetUrl),
+  writeClipboardText: (text: string) => ipcRenderer.invoke("clipboard:write-text", text),
   saveFile: (payload: SaveFilePayload) => ipcRenderer.invoke("file:save", payload),
   saveBinaryFile: (payload: SaveBinaryFilePayload) => ipcRenderer.invoke("file:save-binary", payload),
   saveFileAs: (payload: { defaultPath: string; content: string }) => ipcRenderer.invoke("file:save-as", payload),

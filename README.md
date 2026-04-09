@@ -1,6 +1,6 @@
 # DeskPilot
 
-DeskPilot is a simple Markdown editor.
+DeskPilot is a simple and lightweight Markdown editor.
 
 ## Screenshot
 
@@ -12,6 +12,7 @@ DeskPilot is a simple Markdown editor.
 - [x] Edit other text file types
 - [x] Preview web pages / PDF / media files
 - [ ] Implement all menu features
+- [ ] Multi-language support
 - [ ] Enhance full-text search (RetrievalBoost)
 - [ ] Add an AI assistant
 - [ ] Connect to local models
