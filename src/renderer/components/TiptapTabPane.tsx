@@ -278,6 +278,8 @@ export function TiptapTabPane({
     [draftHtml, markdown, tabPath]
   );
   const lastSyncedHtmlRef = React.useRef(resolvedHtml);
+  const lastSyncedDocJsonRef = React.useRef<string>("");
+  const isHydratingRef = React.useRef(true);
   const lastKnownSelectionRef = React.useRef<StoredSelection | null>(null);
   const [imagePreview, setImagePreview] = React.useState<ImagePreviewState | null>(null);
   const [imageEditSrc, setImageEditSrc] = React.useState("");
@@ -285,6 +287,11 @@ export function TiptapTabPane({
   const [imageEditTitle, setImageEditTitle] = React.useState("");
   const [mathEditor, setMathEditor] = React.useState<MathEditorState | null>(null);
   const [mathLatex, setMathLatex] = React.useState("");
+
+  const syncLastSavedSnapshot = React.useCallback((nextEditor: { getHTML: () => string; getJSON: () => unknown }) => {
+    lastSyncedHtmlRef.current = nextEditor.getHTML();
+    lastSyncedDocJsonRef.current = JSON.stringify(nextEditor.getJSON());
+  }, []);
 
   const handleSaveKeyDownCapture = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const key = String(event.key || "").toLowerCase();
@@ -330,6 +337,8 @@ export function TiptapTabPane({
 
   React.useEffect(() => {
     lastSyncedHtmlRef.current = resolvedHtml;
+    lastSyncedDocJsonRef.current = "";
+    isHydratingRef.current = true;
   }, [tabPath, resolvedHtml]);
 
   React.useEffect(() => {
@@ -424,14 +433,36 @@ export function TiptapTabPane({
         return false;
       }
     },
-    onUpdate: ({ editor: nextEditor }) => {
+    onUpdate: ({ editor: nextEditor, transaction }) => {
+      if (!transaction.docChanged) {
+        return;
+      }
+
+      if (isHydratingRef.current || !lastSyncedDocJsonRef.current) {
+        syncLastSavedSnapshot(nextEditor);
+        isHydratingRef.current = false;
+        emitOutline(nextEditor.state.doc);
+        return;
+      }
+
+      const isPointerNormalization = Boolean(transaction.getMeta("pointer")) && !transaction.getMeta("uiEvent");
+      if (isPointerNormalization) {
+        syncLastSavedSnapshot(nextEditor);
+        return;
+      }
+
       const nextHtml = nextEditor.getHTML();
+      const nextDocJson = JSON.stringify(nextEditor.getJSON());
       emitOutline(nextEditor.state.doc);
       onTextChange(tabPath, {
         html: nextHtml,
         text: nextEditor.getText({ blockSeparator: "\n" }),
-        isDirty: nextHtml !== lastSyncedHtmlRef.current
+        isDirty: nextDocJson !== lastSyncedDocJsonRef.current
       });
+    },
+    onCreate: ({ editor: nextEditor }) => {
+      syncLastSavedSnapshot(nextEditor);
+      isHydratingRef.current = false;
     },
     onSelectionUpdate: ({ editor: nextEditor }) => {
       const { anchor, head } = nextEditor.state.selection;
@@ -543,14 +574,25 @@ export function TiptapTabPane({
       return;
     }
 
+    syncLastSavedSnapshot(editor);
+    isHydratingRef.current = false;
+  }, [editor, syncLastSavedSnapshot]);
+
+  React.useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
     if (resolvedHtml === lastSyncedHtmlRef.current) {
       return;
     }
 
+    isHydratingRef.current = true;
     editor.commands.setContent(resolvedHtml, false);
-    lastSyncedHtmlRef.current = resolvedHtml;
+    syncLastSavedSnapshot(editor);
+    isHydratingRef.current = false;
     emitOutline(editor.state.doc);
-  }, [editor, emitOutline, resolvedHtml]);
+  }, [editor, emitOutline, resolvedHtml, syncLastSavedSnapshot]);
 
   React.useEffect(() => {
     return () => {
