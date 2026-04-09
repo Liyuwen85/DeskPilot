@@ -624,7 +624,29 @@ ipcMain.handle("dialog:open-file", async (event) => {
   }
 
   const result = await dialog.showOpenDialog(currentWindow, {
-    properties: ["openFile"]
+    properties: ["openFile"],
+    filters: [
+      { name: "Markdown Files", extensions: ["md", "markdown", "mdx"] },
+      {
+        name: "Other Text Files",
+        extensions: [
+          "txt", "json", "js", "cjs", "mjs", "ts", "tsx", "jsx",
+          "html", "css", "scss", "sass", "less", "xml", "yml", "yaml",
+          "toml", "ini", "log", "csv", "py", "java", "cpp", "c", "h",
+          "hpp", "rs", "go", "sh", "ps1", "bat", "sql"
+        ]
+      },
+      {
+        name: "Web / PDF / Media Files",
+        extensions: [
+          "html", "htm", "xhtml", "pdf",
+          "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "ico", "tif", "tiff",
+          "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "weba",
+          "mp4", "webm", "ogv", "mov", "m4v", "mkv", "avi"
+        ]
+      },
+      { name: "All Files", extensions: ["*"] }
+    ]
   });
 
   if (result.canceled || result.filePaths.length === 0) {

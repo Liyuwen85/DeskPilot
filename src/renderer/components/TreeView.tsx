@@ -174,7 +174,7 @@ const TreeRow = React.memo(function TreeRow({
             {isLoading
               ? "..."
               : node.hasChildren
-                ? (node.isExpanded ? UI_TEXT.sidebar.expand : UI_TEXT.sidebar.collapse)
+                ? (node.isExpanded ? UI_TEXT.sidebar.collapse : UI_TEXT.sidebar.expand)
                 : ""}
           </button>
           {isRenaming ? renameInput : (

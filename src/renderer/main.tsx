@@ -450,6 +450,7 @@ function App() {
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [activeView, setActiveView] = React.useState("explorer");
+  const [sidebarVisible, setSidebarVisible] = React.useState(true);
   const [tabContextMenu, setTabContextMenu] = React.useState(null);
   const [treeContextMenu, setTreeContextMenu] = React.useState(null);
   const [selectedTreePath, setSelectedTreePath] = React.useState<string | null>(null);
@@ -1286,7 +1287,14 @@ function App() {
       return;
     }
 
-    applyWorkspaceResult(result);
+    if (rootPath) {
+      if (result.file) {
+        openFilePayload(result.file);
+      }
+    } else {
+      applyWorkspaceResult(result);
+    }
+
     if (result.file?.path) {
       updateRecentItems({
         path: result.file.path,
@@ -1295,7 +1303,7 @@ function App() {
         timestamp: Date.now()
       });
     }
-  }, [applyWorkspaceResult, updateRecentItems]);
+  }, [applyWorkspaceResult, openFilePayload, rootPath, updateRecentItems]);
 
   const openRecentItem = React.useCallback(async (item) => {
     const result = await window.desktopApi.openWorkspacePath(item.path);
@@ -2226,6 +2234,10 @@ function App() {
   };
 
   const handleSidebarResizeStart = React.useCallback((event) => {
+    if (!sidebarVisible) {
+      return;
+    }
+
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = sidebarWidth;
@@ -2245,7 +2257,7 @@ function App() {
 
     window.addEventListener("mousemove", handlePointerMove);
     window.addEventListener("mouseup", handlePointerUp);
-  }, [sidebarWidth]);
+  }, [sidebarVisible, sidebarWidth]);
 
   const treeContextNode = treeContextMenu?.node || null;
   const isWorkspaceRootNode = Boolean(treeContextNode && rootPath && treeContextNode.path === rootPath);
@@ -2255,6 +2267,7 @@ function App() {
   return (
     <div
       id="app-shell"
+      className={sidebarVisible ? "" : "app-shell--sidebar-collapsed"}
       style={{
         "--sidebar-width": `${sidebarWidth}px`
       } as CSSProperties}
@@ -2335,7 +2348,22 @@ function App() {
       </header>
 
       <div className="app-body">
-        <ActivityBar activeView={activeView} onSelect={setActiveView} />
+        <ActivityBar
+          activeView={activeView}
+          sidebarVisible={sidebarVisible}
+          onSelect={(nextView) => {
+            setActiveView((currentView) => {
+              const resolvedView = currentView || nextView;
+              setSidebarVisible((previous) => {
+                if (previous && resolvedView === nextView) {
+                  return false;
+                }
+                return true;
+              });
+              return nextView;
+            });
+          }}
+        />
 
         <aside className="sidebar">
           {renderSidebarBody()}

@@ -89,6 +89,10 @@ input {
   grid-template-rows: 52px minmax(0, 1fr) 24px;
 }
 
+#app-shell.app-shell--sidebar-collapsed {
+  grid-template-columns: 48px 0 0 minmax(0, 1fr);
+}
+
 #app-shell.app-shell--document {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -309,7 +313,7 @@ input {
 .command-box {
   position: relative;
   width: 100%;
-  max-width: 380px;
+  max-width: 350px;
   -webkit-app-region: no-drag;
   pointer-events: auto;
 }
@@ -518,6 +522,10 @@ input {
   border-right: 1px solid var(--border);
 }
 
+#app-shell.app-shell--sidebar-collapsed .sidebar {
+  display: none;
+}
+
 .sidebar-resizer {
   grid-column: 3;
   grid-row: 2 / 4;
@@ -525,6 +533,10 @@ input {
   cursor: col-resize;
   background: transparent;
   z-index: 3;
+}
+
+#app-shell.app-shell--sidebar-collapsed .sidebar-resizer {
+  display: none;
 }
 
 .sidebar-resizer::before {

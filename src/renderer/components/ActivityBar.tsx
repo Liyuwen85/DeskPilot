@@ -1,6 +1,6 @@
 import React from "react";
 
-export function ActivityBar({ activeView, onSelect }) {
+export function ActivityBar({ activeView, sidebarVisible, onSelect }) {
   const items = [
     { id: "explorer", icon: "▦", label: "资源管理器" }
   ];
@@ -12,7 +12,7 @@ export function ActivityBar({ activeView, onSelect }) {
           <button
             key={item.id}
             type="button"
-            className={`activitybar__item ${activeView === item.id ? "activitybar__item--active" : ""}`}
+            className={`activitybar__item ${sidebarVisible && activeView === item.id ? "activitybar__item--active" : ""}`}
             title={item.label}
             onClick={() => onSelect(item.id)}
           >
