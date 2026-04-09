@@ -10,13 +10,15 @@ DeskPilot is a simple Markdown editor.
 
 - [x] Edit Markdown
 - [x] Edit other text file types
+- [x] Preview web pages / PDF / media files
 - [ ] Implement all menu features
-- [ ] Add standalone full-text search
-- [ ] Add an AI assistant window
-- [ ] Connect to local Ollama
-- [ ] Connect to remote large models
+- [ ] Enhance full-text search (RetrievalBoost)
+- [ ] Add an AI assistant
+- [ ] Connect to local models
+- [ ] Connect to remote models
 - [ ] Add vector search
 - [ ] Add automatic content summarization
+- [ ] Add automatic related-content analysis
 - [ ] Build a local knowledge base (TBD)
 
 ## Contact

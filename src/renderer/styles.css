@@ -1427,6 +1427,7 @@ input {
   color: inherit;
   font-size: inherit;
   cursor: default;
+  white-space: nowrap;
 }
 
 .statusbar__item:hover {
