@@ -1,5 +1,6 @@
 import React from "react";
 import { ImageTabPane } from "./ImageTabPane";
+import { PdfTabPane } from "./PdfTabPane";
 import { TextTabPane } from "./TextTabPane";
 import { UI_TEXT } from "../ui-text";
 import type { TiptapCommandApi, TiptapOutlineApi, TiptapOutlineItem } from "./TiptapTabPane";
@@ -13,7 +14,7 @@ interface FileTabLike {
   path: string;
   name?: string;
   content: string;
-  kind: "markdown" | "text" | "image" | "binary";
+  kind: "markdown" | "text" | "image" | "pdf" | "binary";
 }
 
 interface MarkdownDraftLike {
@@ -51,13 +52,21 @@ export const EditorHost = React.memo(function EditorHost({
   React.useEffect(() => {
     setMountedTabPaths((previous) => {
       const availablePaths = new Set(tabs.map((tab) => tab.path));
+      const stickyPaths = new Set(
+        tabs
+          .filter((tab) => tab.kind === "pdf" || tab.kind === "image")
+          .map((tab) => tab.path)
+      );
       const filtered = previous.filter((path) => availablePaths.has(path));
       if (!activeTabPath || !availablePaths.has(activeTabPath)) {
-        return filtered;
+        const persistedPaths = filtered.filter((path) => stickyPaths.has(path));
+        return Array.from(new Set(persistedPaths));
       }
 
-      const next = [activeTabPath, ...filtered.filter((path) => path !== activeTabPath)];
-      return next.slice(0, 2);
+      const persistedPaths = filtered.filter((path) => stickyPaths.has(path) && path !== activeTabPath);
+      const recentPaths = filtered.filter((path) => !stickyPaths.has(path) && path !== activeTabPath);
+      const next = [activeTabPath, ...persistedPaths, ...recentPaths];
+      return Array.from(new Set(next)).slice(0, 2 + persistedPaths.length);
     });
   }, [activeTabPath, tabs]);
 
@@ -100,6 +109,16 @@ export const EditorHost = React.memo(function EditorHost({
               key={tab.path}
               path={tab.content || tab.path}
               name={tab.name}
+              active={active}
+            />
+          );
+        }
+
+        if (tab.kind === "pdf") {
+          return (
+            <PdfTabPane
+              key={tab.path}
+              path={tab.content || tab.path}
               active={active}
             />
           );

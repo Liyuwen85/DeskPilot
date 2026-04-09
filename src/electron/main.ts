@@ -100,6 +100,10 @@ function getFileKind(filePath: string): FileKind {
     return "image";
   }
 
+  if (isPdfFile(filePath)) {
+    return "pdf";
+  }
+
   return "text";
 }
 
@@ -110,6 +114,10 @@ function isImageFile(filePath: string): boolean {
   ]);
 
   return imageExtensions.has(ext);
+}
+
+function isPdfFile(filePath: string): boolean {
+  return path.extname(filePath).toLowerCase() === ".pdf";
 }
 
 function isTextFile(filePath: string): boolean {
@@ -211,6 +219,18 @@ async function readFilePayload(filePath: string): Promise<FileTab> {
       encoding: "binary",
       readonlyHint: true,
       kind: "image",
+      isTemporary: false
+    };
+  }
+
+  if (isPdfFile(filePath)) {
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      content: filePath,
+      encoding: "binary",
+      readonlyHint: true,
+      kind: "pdf",
       isTemporary: false
     };
   }
