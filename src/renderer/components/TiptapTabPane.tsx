@@ -7,6 +7,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { marked } from "marked";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import { FindPanel } from "./FindPanel";
 import { UI_TEXT } from "../ui-text";
 
 interface MarkdownDraftPayload {
@@ -312,8 +313,14 @@ export function TiptapTabPane({
   const [copiedCodeBlockId, setCopiedCodeBlockId] = React.useState<string | null>(null);
   const [copyHintId, setCopyHintId] = React.useState<string | null>(null);
   const [codeBlockOverlays, setCodeBlockOverlays] = React.useState<CodeBlockOverlayItem[]>([]);
+  const [findOpen, setFindOpen] = React.useState(false);
+  const [findQuery, setFindQuery] = React.useState("");
+  const [findMatchIndex, setFindMatchIndex] = React.useState(-1);
+  const [findMatchCount, setFindMatchCount] = React.useState(0);
+  const [findJumpToken, setFindJumpToken] = React.useState(0);
   const copyResetTimerRef = React.useRef<number | null>(null);
   const editorBodyRef = React.useRef<HTMLDivElement | null>(null);
+  const findMatchesRef = React.useRef<Array<{ from: number; to: number }>>([]);
 
   const syncLastSavedSnapshot = React.useCallback((nextEditor: { getHTML: () => string; getJSON: () => unknown }) => {
     lastSyncedHtmlRef.current = nextEditor.getHTML();
@@ -326,6 +333,13 @@ export function TiptapTabPane({
       event.preventDefault();
       event.stopPropagation();
       onSaveShortcut?.();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && key === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      setFindOpen(true);
     }
   }, [onSaveShortcut]);
 
@@ -443,6 +457,22 @@ export function TiptapTabPane({
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [closeImagePreview, closeMathEditor, imagePreview, mathEditor]);
+
+  React.useEffect(() => {
+    if (!active) {
+      setFindOpen(false);
+    }
+  }, [active]);
+
+  React.useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    return window.desktopApi.onWindowEscape(() => {
+      setFindOpen(false);
+    });
+  }, [active]);
 
   React.useEffect(() => {
     return () => {
@@ -616,6 +646,89 @@ export function TiptapTabPane({
 
     setCodeBlockOverlays((previous) => (
       JSON.stringify(previous) === JSON.stringify(nextOverlays) ? previous : nextOverlays
+    ));
+  }, []);
+
+  const refreshFindMatches = React.useCallback((query: string) => {
+    if (!editor) {
+      findMatchesRef.current = [];
+      setFindMatchIndex(-1);
+      setFindMatchCount(0);
+      return 0;
+    }
+
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    if (!normalizedQuery) {
+      findMatchesRef.current = [];
+      setFindMatchIndex(-1);
+      setFindMatchCount(0);
+      return 0;
+    }
+
+    const nextMatches: Array<{ from: number; to: number }> = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (!node.isText || !node.text) {
+        return;
+      }
+
+      const lowerText = node.text.toLowerCase();
+      let searchIndex = 0;
+      while (searchIndex <= lowerText.length) {
+        const index = lowerText.indexOf(normalizedQuery, searchIndex);
+        if (index === -1) {
+          break;
+        }
+
+        nextMatches.push({
+          from: pos + index,
+          to: pos + index + normalizedQuery.length
+        });
+        searchIndex = index + Math.max(1, normalizedQuery.length);
+      }
+    });
+
+    findMatchesRef.current = nextMatches;
+    setFindMatchIndex(-1);
+    setFindMatchCount(nextMatches.length);
+    return nextMatches.length;
+  }, [editor]);
+
+  React.useEffect(() => {
+    refreshFindMatches(findQuery);
+  }, [findQuery, refreshFindMatches, resolvedHtml]);
+
+  React.useEffect(() => {
+    if (!editor || findJumpToken === 0 || findMatchIndex < 0) {
+      return;
+    }
+
+    const target = findMatchesRef.current[findMatchIndex];
+    if (!target) {
+      return;
+    }
+
+    editor.chain().focus().setTextSelection({ from: target.from, to: target.to }).scrollIntoView().run();
+  }, [editor, findJumpToken, findMatchIndex]);
+
+  const handlePrevFindMatch = React.useCallback(() => {
+    const total = findMatchesRef.current.length;
+    if (total === 0) {
+      return;
+    }
+    setFindJumpToken((previous) => previous + 1);
+    setFindMatchIndex((previous) => (
+      previous < 0 ? total - 1 : (previous - 1 + total) % total
+    ));
+  }, []);
+
+  const handleNextFindMatch = React.useCallback(() => {
+    const total = findMatchesRef.current.length;
+    if (total === 0) {
+      return;
+    }
+    setFindJumpToken((previous) => previous + 1);
+    setFindMatchIndex((previous) => (
+      previous < 0 ? 0 : (previous + 1) % total
     ));
   }, []);
 
@@ -1028,6 +1141,20 @@ export function TiptapTabPane({
 
   return (
     <div className={`editor-shell editor-shell--tiptap ${active ? "" : "editor-shell--hidden"}`}>
+      <FindPanel
+        visible={findOpen}
+        query={findQuery}
+        currentIndex={findMatchIndex}
+        totalCount={findMatchCount}
+        onQueryChange={(value) => {
+          setFindQuery(value);
+          setFindMatchIndex(-1);
+          setFindJumpToken(0);
+        }}
+        onPrev={handlePrevFindMatch}
+        onNext={handleNextFindMatch}
+        onClose={() => setFindOpen(false)}
+      />
       <div
         ref={editorBodyRef}
         className="editor-body"

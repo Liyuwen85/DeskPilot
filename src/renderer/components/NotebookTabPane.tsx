@@ -1,18 +1,19 @@
 import React from "react";
 import katex from "katex";
 import { marked } from "marked";
+import { FindPanel } from "./FindPanel";
+import type { TiptapOutlineApi, TiptapOutlineItem } from "./TiptapTabPane";
 
 interface NotebookTabPaneProps {
   tabPath: string;
   content: string;
   name?: string;
   active: boolean;
+  onOutlineChange?: (tabPath: string, items: TiptapOutlineItem[]) => void;
+  onOutlineApiReady?: (tabPath: string, api: TiptapOutlineApi | null) => void;
 }
 
-interface NotebookHeadingItem {
-  id: string;
-  text: string;
-  level: number;
+interface NotebookHeadingItem extends TiptapOutlineItem {
   cellIndex: number;
 }
 
@@ -229,7 +230,7 @@ function PlotlyOutput({ value }: { value: string }) {
     let resizeObserver: ResizeObserver | null = null;
     let plotlyInstance: any = null;
 
-    void import("plotly.js-dist-min").then((module) => {
+    void import("plotly.js-basic-dist-min").then((module) => {
       if (cancelled || !containerRef.current) {
         return;
       }
@@ -278,9 +279,19 @@ function PlotlyOutput({ value }: { value: string }) {
   return <div ref={containerRef} className="notebook-output__plotly" />;
 }
 
-export function NotebookTabPane({ tabPath, content, name, active }: NotebookTabPaneProps) {
+export function NotebookTabPane({
+  tabPath,
+  content,
+  name,
+  active,
+  onOutlineChange,
+  onOutlineApiReady
+}: NotebookTabPaneProps) {
   const bodyRef = React.useRef<HTMLDivElement | null>(null);
   const [copiedKey, setCopiedKey] = React.useState("");
+  const [findOpen, setFindOpen] = React.useState(false);
+  const [findQuery, setFindQuery] = React.useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = React.useState(-1);
   const parsedNotebook = React.useMemo(() => {
     try {
       const parsed = JSON.parse(content);
@@ -315,11 +326,43 @@ export function NotebookTabPane({ tabPath, content, name, active }: NotebookTabP
           id: `cell-${index}-heading-${headingIndex}`,
           text: String(match?.[2] || "").trim(),
           level: String(match?.[1] || "").length,
+          pos: index,
           cellIndex: index
         }))
         .filter((item) => item.text);
     });
   }, [cells]);
+
+  const findMatches = React.useMemo(() => {
+    const query = String(findQuery || "").trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+
+    return cells.flatMap((cell: any, index: number) => {
+      const matches = [];
+      const source = normalizeSource(cell?.source);
+      if (source.toLowerCase().includes(query)) {
+        matches.push({
+          cellIndex: index,
+          key: `cell-${index}-source`
+        });
+      }
+
+      const outputs = cell?.cell_type === "code" ? getCellOutputs(cell) : [];
+      for (let outputIndex = 0; outputIndex < outputs.length; outputIndex += 1) {
+        const entries = getOutputEntries(outputs[outputIndex]);
+        if (entries.some((entry) => String(entry.value || "").toLowerCase().includes(query))) {
+          matches.push({
+            cellIndex: index,
+            key: `cell-${index}-output-${outputIndex}`
+          });
+        }
+      }
+
+      return matches;
+    });
+  }, [cells, findQuery]);
 
   React.useEffect(() => {
     if (!copiedKey) {
@@ -332,6 +375,64 @@ export function NotebookTabPane({ tabPath, content, name, active }: NotebookTabP
 
     return () => window.clearTimeout(timer);
   }, [copiedKey]);
+
+  React.useEffect(() => {
+    if (findMatches.length === 0 && activeMatchIndex !== -1) {
+      setActiveMatchIndex(-1);
+      return;
+    }
+
+    if (activeMatchIndex >= findMatches.length) {
+      setActiveMatchIndex(findMatches.length > 0 ? 0 : -1);
+    }
+  }, [activeMatchIndex, findMatches.length]);
+
+  React.useEffect(() => {
+    if (!findOpen || findMatches.length === 0 || activeMatchIndex < 0) {
+      return;
+    }
+
+    const nextMatch = findMatches[activeMatchIndex];
+    const bodyElement = bodyRef.current;
+    const target = bodyElement?.querySelector<HTMLElement>(`[data-notebook-cell-index="${nextMatch.cellIndex}"]`);
+    target?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }, [activeMatchIndex, findMatches, findOpen]);
+
+  React.useEffect(() => {
+    if (!active) {
+      setFindOpen(false);
+    }
+  }, [active]);
+
+  React.useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    return window.desktopApi.onWindowEscape(() => {
+      setFindOpen(false);
+    });
+  }, [active]);
+
+  React.useEffect(() => {
+    if (!active) {
+      return undefined;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const key = String(event.key || "").toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && key === "f") {
+        event.preventDefault();
+        setFindOpen(true);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [active]);
 
   const handleContentClick = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target instanceof HTMLElement ? event.target : null;
@@ -372,10 +473,64 @@ export function NotebookTabPane({ tabPath, content, name, active }: NotebookTabP
     });
   }, []);
 
+  React.useEffect(() => {
+    onOutlineChange?.(tabPath, headingItems);
+  }, [headingItems, onOutlineChange, tabPath]);
+
+  React.useEffect(() => {
+    onOutlineApiReady?.(tabPath, {
+      scrollToItem: (itemId: string) => {
+        const targetItem = headingItems.find((item) => item.id === itemId);
+        if (!targetItem) {
+          return;
+        }
+
+        handleJumpToCell(targetItem.cellIndex);
+      }
+    });
+
+    return () => {
+      onOutlineApiReady?.(tabPath, null);
+    };
+  }, [handleJumpToCell, headingItems, onOutlineApiReady, tabPath]);
+
+  const handlePrevMatch = React.useCallback(() => {
+    if (findMatches.length === 0) {
+      return;
+    }
+
+    setActiveMatchIndex((previous) => (
+      previous < 0 ? findMatches.length - 1 : (previous - 1 + findMatches.length) % findMatches.length
+    ));
+  }, [findMatches.length]);
+
+  const handleNextMatch = React.useCallback(() => {
+    if (findMatches.length === 0) {
+      return;
+    }
+
+    setActiveMatchIndex((previous) => (
+      previous < 0 ? 0 : (previous + 1) % findMatches.length
+    ));
+  }, [findMatches.length]);
+
   return (
     <div className={`editor-shell editor-shell--notebook ${active ? "" : "editor-shell--hidden"}`}>
+      <FindPanel
+        visible={findOpen}
+        query={findQuery}
+        currentIndex={activeMatchIndex}
+        totalCount={findMatches.length}
+        onQueryChange={(value) => {
+          setFindQuery(value);
+          setActiveMatchIndex(-1);
+        }}
+        onPrev={handlePrevMatch}
+        onNext={handleNextMatch}
+        onClose={() => setFindOpen(false)}
+      />
       <div className="notebook-tab" onClick={handleContentClick}>
-        <div className={`notebook-tab__layout ${headingItems.length ? "notebook-tab__layout--with-outline" : ""}`}>
+        <div className="notebook-tab__layout">
           <div ref={bodyRef} className="notebook-tab__body">
             {parsedNotebook.error ? (
               <div className="notebook-tab__error">
@@ -398,12 +553,12 @@ export function NotebookTabPane({ tabPath, content, name, active }: NotebookTabP
                 return (
                   <section
                     key={`${cellType}-${index}`}
-                    className={`notebook-cell notebook-cell--${cellType}`}
+                    className={`notebook-cell notebook-cell--${cellType} ${activeMatchIndex >= 0 && findMatches[activeMatchIndex]?.cellIndex === index ? "notebook-cell--search-active" : ""}`}
                     data-notebook-cell-index={index}
                   >
                     <div className="notebook-cell__meta">
                       <span className="notebook-cell__index">#{index + 1}</span>
-                      <span className="notebook-cell__type">{cellType === "code" ? "Code" : "Markdown"}</span>
+                      <span className="notebook-cell__type">{cellType === "code" ? "Code" : "MD"}</span>
                     </div>
                     <div className="notebook-cell__main">
                       {cellType === "markdown" ? (
@@ -536,25 +691,6 @@ export function NotebookTabPane({ tabPath, content, name, active }: NotebookTabP
               })
             )}
           </div>
-          {headingItems.length ? (
-            <aside className="notebook-outline" aria-label="Notebook Outline">
-              <div className="notebook-outline__header">Outline</div>
-              <div className="notebook-outline__list">
-                {headingItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`notebook-outline__item notebook-outline__item--level-${Math.min(item.level, 6)}`}
-                    onClick={() => handleJumpToCell(item.cellIndex)}
-                    title={item.text}
-                  >
-                    <span className="notebook-outline__level">H{item.level}</span>
-                    <span className="notebook-outline__text">{item.text}</span>
-                  </button>
-                ))}
-              </div>
-            </aside>
-          ) : null}
         </div>
       </div>
     </div>

@@ -44,6 +44,10 @@ export default defineConfig({
           if (id.includes(`${path.sep}katex${path.sep}`) || id.includes("/katex/")) {
             return "katex";
           }
+
+          if (id.includes(`${path.sep}plotly.js-basic-dist-min${path.sep}`) || id.includes("/plotly.js-basic-dist-min/")) {
+            return "plotly-basic";
+          }
         }
       }
     }

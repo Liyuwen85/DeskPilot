@@ -159,6 +159,8 @@ export const EditorHost = React.memo(function EditorHost({
               content={tab.content}
               name={tab.name}
               active={active}
+              onOutlineChange={onOutlineChange}
+              onOutlineApiReady={onOutlineApiReady}
             />
           );
         }

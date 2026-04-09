@@ -304,7 +304,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
                 ? "Text"
                 : "Ready";
   const isPreviewTab = Boolean(tab && (tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook"));
-  const canToggleOutline = tab?.kind === "markdown";
+  const canToggleOutline = tab?.kind === "markdown" || tab?.kind === "notebook";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
   const activePreviewDetailItems = React.useMemo(() => {
     if (!tab || !activePreviewStatus) {
@@ -585,23 +585,25 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
             <>
               <button type="button" className="statusbar__item" onClick={() => void saveCurrentWithToast()}>{UI_TEXT.statusbar.save}</button>
               <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
-              <button
-                type="button"
-                className={`statusbar__item ${showOutlinePane ? "statusbar__item--accent" : ""}`}
-                disabled={!canToggleOutline}
-                onClick={() => setOutlineOpen((previous) => !previous)}
-              >
-                {UI_TEXT.statusbar.outline}
-              </button>
-              <span className="statusbar__item">{activeTabKindLabel}</span>
-              <span className="statusbar__item">UTF-8</span>
             </>
-          ) : (
+          ) : null}
+          {canToggleOutline ? (
+            <button
+              type="button"
+              className={`statusbar__item ${showOutlinePane ? "statusbar__item--accent" : ""}`}
+              onClick={() => setOutlineOpen((previous) => !previous)}
+            >
+              {UI_TEXT.statusbar.outline}
+            </button>
+          ) : null}
+          {tab ? (
             <>
               <span className="statusbar__item">{activeTabKindLabel}</span>
-              <span className="statusbar__item">Preview</span>
+              {!isPreviewTab ? (
+                <span className="statusbar__item">UTF-8</span>
+              ) : null}
             </>
-          )}
+          ) : null}
         </div>
       </footer>
 

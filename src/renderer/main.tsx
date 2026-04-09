@@ -812,7 +812,7 @@ function App() {
     return [];
   }, [activePreviewStatus, activeTab]);
   const activeOutlineItems = activeTab ? outlineMap[activeTab.path] || [] : [];
-  const canToggleOutline = activeTab?.kind === "markdown";
+  const canToggleOutline = activeTab?.kind === "markdown" || activeTab?.kind === "notebook";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
   // Read markdown commands at click time instead of render time. The command
   // map lives in a ref, so caching a snapshot here can leave menus bound to a
@@ -2567,23 +2567,25 @@ function App() {
             <>
               <button type="button" className="statusbar__item" onClick={() => void saveActiveFileWithToast()}>{UI_TEXT.statusbar.save}</button>
               <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
-              <button
-                type="button"
-                className={`statusbar__item ${showOutlinePane ? "statusbar__item--accent" : ""}`}
-                disabled={!canToggleOutline}
-                onClick={() => setOutlineOpen((previous) => !previous)}
-              >
-                {UI_TEXT.statusbar.outline}
-              </button>
-              <span className="statusbar__item">{activeTabKindLabel}</span>
-              <span className="statusbar__item">UTF-8</span>
             </>
-          ) : (
+          ) : null}
+          {canToggleOutline ? (
+            <button
+              type="button"
+              className={`statusbar__item ${showOutlinePane ? "statusbar__item--accent" : ""}`}
+              onClick={() => setOutlineOpen((previous) => !previous)}
+            >
+              {UI_TEXT.statusbar.outline}
+            </button>
+          ) : null}
+          {activeTab ? (
             <>
               <span className="statusbar__item">{activeTabKindLabel}</span>
-              <span className="statusbar__item">{activeTab ? "Preview" : "Idle"}</span>
+              {!isPreviewTab ? (
+                <span className="statusbar__item">UTF-8</span>
+              ) : null}
             </>
-          )}
+          ) : null}
         </div>
       </footer>
 
