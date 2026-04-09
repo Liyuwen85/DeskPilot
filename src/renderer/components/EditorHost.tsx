@@ -1,6 +1,7 @@
-﻿import React from "react";
+import React from "react";
 import { TextTabPane } from "./TextTabPane";
 import { UI_TEXT } from "../ui-text";
+import type { TiptapOutlineApi, TiptapOutlineItem } from "./TiptapTabPane";
 
 const LazyTiptapTabPane = React.lazy(async () => {
   const module = await import("./TiptapTabPane");
@@ -26,6 +27,8 @@ interface EditorHostProps {
   textContentMap: Record<string, string | undefined>;
   onTextChange: (tabPath: string, value: string | MarkdownDraftLike) => void;
   onSaveShortcut: () => void;
+  onOutlineChange?: (tabPath: string, items: TiptapOutlineItem[]) => void;
+  onOutlineApiReady?: (tabPath: string, api: TiptapOutlineApi | null) => void;
 }
 
 export const EditorHost = React.memo(function EditorHost({
@@ -34,7 +37,9 @@ export const EditorHost = React.memo(function EditorHost({
   markdownDraftMap,
   textContentMap,
   onTextChange,
-  onSaveShortcut
+  onSaveShortcut,
+  onOutlineChange,
+  onOutlineApiReady
 }: EditorHostProps) {
   const [mountedTabPaths, setMountedTabPaths] = React.useState<string[]>(() => (
     activeTabPath ? [activeTabPath] : []
@@ -78,6 +83,8 @@ export const EditorHost = React.memo(function EditorHost({
                 active={active}
                 onTextChange={onTextChange}
                 onSaveShortcut={onSaveShortcut}
+                onOutlineChange={onOutlineChange}
+                onOutlineApiReady={onOutlineApiReady}
               />
             </React.Suspense>
           );

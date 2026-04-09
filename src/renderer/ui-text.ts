@@ -26,8 +26,8 @@ export const UI_TEXT = {
     workspaceTitle: "当前工作区",
     resizeAriaLabel: "调整侧边栏宽度",
     emptyWorkspace: "请从文件菜单打开文件或文件夹。",
-    expand: "▾",
-    collapse: "▸",
+    expand: "▸",
+    collapse: "▾",
     fileBullet: "•"
   },
   editor: {
@@ -47,7 +47,9 @@ export const UI_TEXT = {
     unsavedFile: "未保存文件",
     unopenedFile: "未打开文件",
     save: "保存",
-    copy: "复制"
+    copy: "复制",
+    outline: "大纲",
+    outlineEmpty: "当前文档没有标题"
   },
   window: {
     maximize: "□",

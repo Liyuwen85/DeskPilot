@@ -8,6 +8,7 @@ import { UI_TEXT } from "./ui-text";
 import { ActivityBar } from "./components/ActivityBar";
 import { CommandSearch } from "./components/CommandSearch";
 import { EditorHost } from "./components/EditorHost";
+import type { TiptapOutlineApi, TiptapOutlineItem } from "./components/TiptapTabPane";
 import { FileMenu } from "./components/FileMenu";
 import { Toast } from "./components/Toast";
 import { TreeView } from "./components/TreeView";
@@ -412,6 +413,8 @@ function App() {
   const [recentItems, setRecentItems] = React.useState(() => loadRecentItems());
   const [sidebarWidth, setSidebarWidth] = React.useState(() => loadSidebarWidth());
   const [indexedFiles, setIndexedFiles] = React.useState<any[]>([]);
+  const [outlineOpen, setOutlineOpen] = React.useState(false);
+  const [outlineMap, setOutlineMap] = React.useState<Record<string, TiptapOutlineItem[]>>({});
   const searchInputRef = React.useRef(null);
   const searchBoxRef = React.useRef(null);
   const treeRef = React.useRef(tree);
@@ -427,6 +430,7 @@ function App() {
   const tabTextMapRef = React.useRef(tabTextMap);
   const savedTextMapRef = React.useRef(savedTextMap);
   const markdownDraftMapRef = React.useRef(markdownDraftMap);
+  const outlineApiMapRef = React.useRef(new Map<string, TiptapOutlineApi>());
   const { toast, showSuccess, showError } = useToast();
 
   React.useEffect(() => {
@@ -452,6 +456,20 @@ function App() {
   React.useEffect(() => {
     markdownDraftMapRef.current = markdownDraftMap;
   }, [markdownDraftMap]);
+
+  React.useEffect(() => {
+    const availablePaths = new Set(tabs.map((tab) => tab.path));
+    setOutlineMap((previous) => {
+      const nextEntries = Object.entries(previous).filter(([tabPath]) => availablePaths.has(tabPath));
+      return nextEntries.length === Object.keys(previous).length ? previous : Object.fromEntries(nextEntries);
+    });
+
+    for (const tabPath of outlineApiMapRef.current.keys()) {
+      if (!availablePaths.has(tabPath)) {
+        outlineApiMapRef.current.delete(tabPath);
+      }
+    }
+  }, [tabs]);
 
   React.useEffect(() => {
     window.desktopApi.isWindowMaximized().then(setIsMaximized);
@@ -647,6 +665,9 @@ function App() {
       label: activeTab.path || UI_TEXT.statusbar.unopenedFile
     };
   }, [activeTab]);
+  const activeOutlineItems = activeTab ? outlineMap[activeTab.path] || [] : [];
+  const canToggleOutline = activeTab?.kind === "markdown";
+  const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
   const updateRecentItems = React.useCallback((entry) => {
     setRecentItems((previous) => {
       const next = [entry, ...previous.filter((item) => !(item.kind === entry.kind && item.path === entry.path))];
@@ -1502,6 +1523,44 @@ function App() {
     }
   }, [activeTab, getPersistedContentForTab, showError, showSuccess]);
 
+  const handleOutlineChange = React.useCallback((tabPath: string, items: TiptapOutlineItem[]) => {
+    setOutlineMap((previous) => {
+      const currentItems = previous[tabPath] || [];
+      const isSame = currentItems.length === items.length && currentItems.every((item, index) => (
+        item.id === items[index]?.id
+        && item.level === items[index]?.level
+        && item.text === items[index]?.text
+        && item.pos === items[index]?.pos
+      ));
+
+      if (isSame) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [tabPath]: items
+      };
+    });
+  }, []);
+
+  const handleOutlineApiReady = React.useCallback((tabPath: string, api: TiptapOutlineApi | null) => {
+    if (api) {
+      outlineApiMapRef.current.set(tabPath, api);
+      return;
+    }
+
+    outlineApiMapRef.current.delete(tabPath);
+  }, []);
+
+  const handleOutlineItemClick = React.useCallback((itemId: string) => {
+    if (!activeTabPath) {
+      return;
+    }
+
+    outlineApiMapRef.current.get(activeTabPath)?.scrollToItem(itemId);
+  }, [activeTabPath]);
+
   const exportActiveContent = React.useCallback(async () => {
     if (!activeTab) {
       return;
@@ -2074,14 +2133,41 @@ function App() {
           </div>
 
           <section className={`viewer ${activeTab ? "" : "viewer--empty"}`}>
-            <EditorHost
-              tabs={tabs}
-              activeTabPath={activeTabPath}
-              markdownDraftMap={markdownDraftMap}
-              textContentMap={tabTextMap}
-              onTextChange={handleTabTextChange}
-              onSaveShortcut={() => void saveActiveFileWithToast()}
-            />
+            <div className={`viewer__layout ${showOutlinePane ? "viewer__layout--with-outline" : ""}`}>
+              <EditorHost
+                tabs={tabs}
+                activeTabPath={activeTabPath}
+                markdownDraftMap={markdownDraftMap}
+                textContentMap={tabTextMap}
+                onTextChange={handleTabTextChange}
+                onSaveShortcut={() => void saveActiveFileWithToast()}
+                onOutlineChange={handleOutlineChange}
+                onOutlineApiReady={handleOutlineApiReady}
+              />
+              {showOutlinePane ? (
+                <aside className="outline-pane" aria-label={UI_TEXT.statusbar.outline}>
+                  <div className="outline-pane__header">{UI_TEXT.statusbar.outline}</div>
+                  {activeOutlineItems.length ? (
+                    <div className="outline-pane__list">
+                      {activeOutlineItems.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          className={`outline-pane__item outline-pane__item--level-${Math.min(item.level, 6)}`}
+                          onClick={() => handleOutlineItemClick(item.id)}
+                          title={item.text}
+                        >
+                          <span className="outline-pane__level">H{item.level}</span>
+                          <span className="outline-pane__text">{item.text}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="outline-pane__empty">{UI_TEXT.statusbar.outlineEmpty}</div>
+                  )}
+                </aside>
+              ) : null}
+            </div>
           </section>
         </main>
       </div>
@@ -2096,6 +2182,14 @@ function App() {
         <div className="statusbar__right">
           <button type="button" className="statusbar__item" onClick={() => void saveActiveFileWithToast()}>{UI_TEXT.statusbar.save}</button>
           <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
+          <button
+            type="button"
+            className={`statusbar__item ${showOutlinePane ? "statusbar__item--accent" : ""}`}
+            disabled={!canToggleOutline}
+            onClick={() => setOutlineOpen((previous) => !previous)}
+          >
+            {UI_TEXT.statusbar.outline}
+          </button>
           <span className="statusbar__item">{activeTab?.kind === "markdown" ? "Markdown" : activeTab ? "Text" : "Ready"}</span>
           <span className="statusbar__item">UTF-8</span>
         </div>
