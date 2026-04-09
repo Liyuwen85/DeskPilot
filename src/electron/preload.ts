@@ -6,6 +6,7 @@ import type {
   CreateTextPayload,
   DeletePathPayload,
   RenamePathPayload,
+  SaveBinaryFilePayload,
   SaveFilePayload
 } from "../shared/types";
 
@@ -28,6 +29,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   revealInExplorer: (targetPath: string) => ipcRenderer.invoke("file:reveal-in-explorer", targetPath),
   openExternalUrl: (targetUrl: string) => ipcRenderer.invoke("shell:open-external-url", targetUrl),
   saveFile: (payload: SaveFilePayload) => ipcRenderer.invoke("file:save", payload),
+  saveBinaryFile: (payload: SaveBinaryFilePayload) => ipcRenderer.invoke("file:save-binary", payload),
   saveFileAs: (payload: { defaultPath: string; content: string }) => ipcRenderer.invoke("file:save-as", payload),
   exportFile: (payload: { defaultPath: string; content: string }) => ipcRenderer.invoke("file:export", payload),
   onRequestWindowClose: (listener: () => void) => {

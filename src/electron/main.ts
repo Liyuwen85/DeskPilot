@@ -13,6 +13,7 @@ import type {
   FileKind,
   FileTab,
   RenamePathPayload,
+  SaveBinaryFilePayload,
   SaveFilePayload,
   SaveFileResult,
   TreeNode,
@@ -811,6 +812,31 @@ ipcMain.handle("file:save", async (_event, payload: SaveFilePayload): Promise<Sa
   return {
     ok: true,
     filePath: payload.filePath
+  };
+});
+
+ipcMain.handle("file:save-binary", async (event, payload: SaveBinaryFilePayload): Promise<SaveFileResult> => {
+  const currentWindow = getWindowFromEvent(event);
+  if (!currentWindow || !payload || typeof payload.defaultPath !== "string" || typeof payload.base64Data !== "string") {
+    throw new Error("Invalid binary save payload.");
+  }
+
+  const result = await dialog.showSaveDialog(currentWindow, {
+    title: "保存截图",
+    defaultPath: payload.defaultPath,
+    filters: [
+      { name: "PNG Image", extensions: ["png"] }
+    ]
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+
+  await fs.writeFile(result.filePath, Buffer.from(payload.base64Data, "base64"));
+  return {
+    canceled: false,
+    filePath: result.filePath
   };
 });
 

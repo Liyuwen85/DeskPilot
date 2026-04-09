@@ -17,6 +17,23 @@ function toFileUrl(targetPath: string): string {
   return `file://${encodeURI(normalized)}`;
 }
 
+function buildFrameCapturePath(targetPath: string): string {
+  const match = String(targetPath || "").match(/^(.*[\\/])?([^\\/]+?)(\.[^.\\/]+)?$/);
+  const directory = match?.[1] || "";
+  const baseName = match?.[2] || "frame";
+  const now = new Date();
+  const stamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+    "-",
+    String(now.getHours()).padStart(2, "0"),
+    String(now.getMinutes()).padStart(2, "0"),
+    String(now.getSeconds()).padStart(2, "0")
+  ].join("");
+  return `${directory}${baseName}-frame-${stamp}.png`;
+}
+
 interface MediaTabPaneProps {
   path: string;
   name?: string;
@@ -34,6 +51,7 @@ export function MediaTabPane({ path, name, kind, active, onStatusChange }: Media
   const mediaRef = React.useRef<HTMLMediaElement | null>(null);
   const [fileSizeBytes, setFileSizeBytes] = React.useState(0);
   const [expanded, setExpanded] = React.useState(false);
+
   const emitStatus = React.useCallback(() => {
     const element = mediaRef.current;
     if (!element) {
@@ -145,6 +163,29 @@ export function MediaTabPane({ path, name, kind, active, onStatusChange }: Media
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [active, emitStatus]);
 
+  const handleCaptureFrame = React.useCallback(async () => {
+    const element = mediaRef.current;
+    if (!(element instanceof HTMLVideoElement) || !element.videoWidth || !element.videoHeight) {
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = element.videoWidth;
+    canvas.height = element.videoHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.drawImage(element, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/png");
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+    await window.desktopApi.saveBinaryFile({
+      defaultPath: buildFrameCapturePath(path),
+      base64Data
+    });
+  }, [path]);
+
   return (
     <div className={`editor-shell editor-shell--media ${active ? "" : "editor-shell--hidden"}`}>
       <div className={`media-tab media-tab--${kind} ${expanded ? "media-tab--expanded" : ""}`}>
@@ -152,13 +193,22 @@ export function MediaTabPane({ path, name, kind, active, onStatusChange }: Media
           <span className="media-tab__badge">{kind === "audio" ? "Audio" : "Video"}</span>
           <span className="media-tab__name" title={name || path}>{name || path}</span>
           {kind === "video" ? (
-            <button
-              type="button"
-              className="media-tab__action"
-              onClick={() => setExpanded((previous) => !previous)}
-            >
-              {expanded ? "退出全屏" : "当前页全屏"}
-            </button>
+            <>
+              <button
+                type="button"
+                className="media-tab__action"
+                onClick={() => void handleCaptureFrame()}
+              >
+                截图
+              </button>
+              <button
+                type="button"
+                className="media-tab__action"
+                onClick={() => setExpanded((previous) => !previous)}
+              >
+                {expanded ? "退出全屏" : "当前页全屏"}
+              </button>
+            </>
           ) : null}
         </div>
         <div className="media-tab__viewport">
@@ -181,7 +231,7 @@ export function MediaTabPane({ path, name, kind, active, onStatusChange }: Media
               className="media-tab__player media-tab__player--video"
               src={toFileUrl(path)}
               controls
-              controlsList="noremoteplayback"
+              controlsList="noremoteplayback noplaybackrate"
               disablePictureInPicture
               preload="metadata"
               onLoadedMetadata={emitStatus}

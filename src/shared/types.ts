@@ -56,6 +56,11 @@ export interface SaveFilePayload {
   content: string;
 }
 
+export interface SaveBinaryFilePayload {
+  defaultPath: string;
+  base64Data: string;
+}
+
 export interface SaveFileResult {
   ok?: boolean;
   canceled?: boolean;
@@ -128,6 +133,7 @@ export interface DesktopApi {
   revealInExplorer: (targetPath: string) => Promise<{ ok: boolean }>;
   openExternalUrl: (targetUrl: string) => Promise<{ ok: boolean }>;
   saveFile: (payload: SaveFilePayload) => Promise<SaveFileResult>;
+  saveBinaryFile: (payload: SaveBinaryFilePayload) => Promise<SaveFileResult>;
   saveFileAs: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;
   exportFile: (payload: { defaultPath: string; content: string }) => Promise<SaveFileResult>;
   onRequestWindowClose: (listener: () => void) => () => void;

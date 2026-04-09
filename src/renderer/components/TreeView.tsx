@@ -197,7 +197,10 @@ const TreeRow = React.memo(function TreeRow({
       <div
         className={`tree-node__item tree-node__item--file ${isSelected ? "tree-node__item--selected" : ""}`}
         style={{ paddingLeft }}
-        onClick={() => onSelectNode(node.path)}
+        onClick={() => {
+          onSelectNode(node.path);
+          void onOpenFile(node.path, node.name);
+        }}
         onContextMenu={(event) => onContextMenu(node, event)}
       >
         <span className="tree-node__file-icon">{UI_TEXT.sidebar.fileBullet}</span>
@@ -205,8 +208,10 @@ const TreeRow = React.memo(function TreeRow({
           <button
             type="button"
             className={`tree-node__label ${isActiveFile ? "tree-node__label--active" : ""}`}
-            onClick={() => onSelectNode(node.path)}
-            onDoubleClick={() => void onOpenFile(node.path, node.name)}
+            onClick={() => {
+              onSelectNode(node.path);
+              void onOpenFile(node.path, node.name);
+            }}
           >
             {node.name}
           </button>
