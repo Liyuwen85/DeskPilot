@@ -464,6 +464,7 @@ function App() {
   const [outlineMap, setOutlineMap] = React.useState<Record<string, TiptapOutlineItem[]>>({});
   const [previewStatusMap, setPreviewStatusMap] = React.useState<Record<string, any>>({});
   const [detachedDocumentPaths, setDetachedDocumentPaths] = React.useState<Set<string>>(() => new Set<string>());
+  const [isRestoringWorkspace, setIsRestoringWorkspace] = React.useState(true);
   const searchInputRef = React.useRef(null);
   const searchBoxRef = React.useRef(null);
   const treeRef = React.useRef(tree);
@@ -1133,13 +1134,16 @@ function App() {
       .then(async (launchWorkspacePath) => {
         const initialWorkspacePath = launchWorkspacePath || lastWorkspacePath;
         if (!initialWorkspacePath) {
+          setIsRestoringWorkspace(false);
           return;
         }
 
         await openExternalWorkspacePath(initialWorkspacePath);
+        setIsRestoringWorkspace(false);
       })
       .catch(() => {
         persistLastWorkspacePath("");
+        setIsRestoringWorkspace(false);
       });
   }, [openExternalWorkspacePath]);
 
@@ -1170,6 +1174,7 @@ function App() {
     pendingRestoreFilePathRef.current = "";
     didHydrateSessionRef.current = true;
     restoreSessionSnapshot(snapshot);
+    setIsRestoringWorkspace(false);
   }, [restoreSessionSnapshot, rootPath, tabs.length]);
 
   const openFile = React.useCallback(async (filePath) => {
@@ -1213,6 +1218,7 @@ function App() {
     const candidatePaths = pendingTabPaths.filter((filePath) => isPathInsideRoot(filePath, rootPath));
     if (candidatePaths.length === 0) {
       pendingRestoreTabPathsRef.current = [];
+      setIsRestoringWorkspace(false);
       return;
     }
 
@@ -1229,10 +1235,12 @@ function App() {
       if (resolvedFiles.length === 0) {
         persistLastTabPaths([]);
         persistLastActiveFilePath("");
+        setIsRestoringWorkspace(false);
         return;
       }
 
       restoreSessionTabs(resolvedFiles, desiredActivePath);
+      setIsRestoringWorkspace(false);
     });
   }, [restoreSessionTabs, rootPath]);
 
@@ -1250,6 +1258,8 @@ function App() {
     pendingRestoreFilePathRef.current = "";
     void openFile(pendingFilePath).catch(() => {
       persistLastActiveFilePath("");
+    }).finally(() => {
+      setIsRestoringWorkspace(false);
     });
   }, [openFile, rootPath]);
 
@@ -2180,6 +2190,15 @@ function App() {
       );
     }
 
+    if (showStartupPlaceholder) {
+      return (
+        <div className="panel panel--placeholder">
+          <div className="panel__title">正在恢复工作区</div>
+          <p>正在读取上次打开的文件夹...</p>
+        </div>
+      );
+    }
+
     return (
       <>
         <div className="sidebar__section-label">{UI_TEXT.sidebar.workspaceTitle}</div>
@@ -2229,6 +2248,7 @@ function App() {
   const treeContextNode = treeContextMenu?.node || null;
   const isWorkspaceRootNode = Boolean(treeContextNode && rootPath && treeContextNode.path === rootPath);
   const canCreateInTreeNode = Boolean(treeContextNode && treeContextNode.type === "directory");
+  const showStartupPlaceholder = isRestoringWorkspace && !rootPath && tabs.length === 0;
 
   return (
     <div
@@ -2408,66 +2428,73 @@ function App() {
           </div>
 
           <section className={`viewer ${activeTab ? "" : "viewer--empty"}`}>
-            <div className={`viewer__layout ${showOutlinePane ? "viewer__layout--with-outline" : ""}`}>
-              <EditorHost
-                tabs={tabs}
-                activeTabPath={activeTabPath}
-                markdownDraftMap={markdownDraftMap}
-                textContentMap={tabTextMap}
-                onTextChange={handleTabTextChange}
-                onSaveShortcut={() => void saveActiveFileWithToast()}
-                onOutlineChange={handleOutlineChange}
-                onOutlineApiReady={handleOutlineApiReady}
-                onCommandApiReady={handleCommandApiReady}
-                onPreviewStatusChange={(tabPath, status) => {
-                  setPreviewStatusMap((previous) => {
-                    if (!status) {
-                      if (!(tabPath in previous)) {
+            {showStartupPlaceholder ? (
+              <div className="viewer__empty">
+                <h2>正在打开最近工作区</h2>
+                <p>第二个实例启动时，正在恢复上次打开的文件夹。</p>
+              </div>
+            ) : (
+              <div className={`viewer__layout ${showOutlinePane ? "viewer__layout--with-outline" : ""}`}>
+                <EditorHost
+                  tabs={tabs}
+                  activeTabPath={activeTabPath}
+                  markdownDraftMap={markdownDraftMap}
+                  textContentMap={tabTextMap}
+                  onTextChange={handleTabTextChange}
+                  onSaveShortcut={() => void saveActiveFileWithToast()}
+                  onOutlineChange={handleOutlineChange}
+                  onOutlineApiReady={handleOutlineApiReady}
+                  onCommandApiReady={handleCommandApiReady}
+                  onPreviewStatusChange={(tabPath, status) => {
+                    setPreviewStatusMap((previous) => {
+                      if (!status) {
+                        if (!(tabPath in previous)) {
+                          return previous;
+                        }
+
+                        const next = { ...previous };
+                        delete next[tabPath];
+                        return next;
+                      }
+
+                      const current = previous[tabPath];
+                      const nextStatus = { ...status };
+                      if (current && JSON.stringify(current) === JSON.stringify(nextStatus)) {
                         return previous;
                       }
 
-                      const next = { ...previous };
-                      delete next[tabPath];
-                      return next;
-                    }
-
-                    const current = previous[tabPath];
-                    const nextStatus = { ...status };
-                    if (current && JSON.stringify(current) === JSON.stringify(nextStatus)) {
-                      return previous;
-                    }
-
-                    return {
-                      ...previous,
-                      [tabPath]: nextStatus
-                    };
-                  });
-                }}
-              />
-              {showOutlinePane ? (
-                <aside className="outline-pane" aria-label={UI_TEXT.statusbar.outline}>
-                  <div className="outline-pane__header">{UI_TEXT.statusbar.outline}</div>
-                  {activeOutlineItems.length ? (
-                    <div className="outline-pane__list">
-                      {activeOutlineItems.map((item) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          className={`outline-pane__item outline-pane__item--level-${Math.min(item.level, 6)}`}
-                          onClick={() => handleOutlineItemClick(item.id)}
-                          title={item.text}
-                        >
-                          <span className="outline-pane__level">H{item.level}</span>
-                          <span className="outline-pane__text">{item.text}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="outline-pane__empty">{UI_TEXT.statusbar.outlineEmpty}</div>
-                  )}
-                </aside>
-              ) : null}
-            </div>
+                      return {
+                        ...previous,
+                        [tabPath]: nextStatus
+                      };
+                    });
+                  }}
+                />
+                {showOutlinePane ? (
+                  <aside className="outline-pane" aria-label={UI_TEXT.statusbar.outline}>
+                    <div className="outline-pane__header">{UI_TEXT.statusbar.outline}</div>
+                    {activeOutlineItems.length ? (
+                      <div className="outline-pane__list">
+                        {activeOutlineItems.map((item) => (
+                          <button
+                            type="button"
+                            key={item.id}
+                            className={`outline-pane__item outline-pane__item--level-${Math.min(item.level, 6)}`}
+                            onClick={() => handleOutlineItemClick(item.id)}
+                            title={item.text}
+                          >
+                            <span className="outline-pane__level">H{item.level}</span>
+                            <span className="outline-pane__text">{item.text}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="outline-pane__empty">{UI_TEXT.statusbar.outlineEmpty}</div>
+                    )}
+                  </aside>
+                ) : null}
+              </div>
+            )}
           </section>
         </main>
       </div>

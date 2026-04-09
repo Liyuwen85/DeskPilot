@@ -551,31 +551,7 @@ async function createWindow(options: { mode?: WindowMode; targetPath?: string } 
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_USER_MODEL_ID);
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
-if (!hasSingleInstanceLock) {
-  app.quit();
-}
-
 pendingLaunchWorkspacePath = extractLaunchWorkspacePath(process.argv) || extractLaunchWorkspacePathFromCwd();
-
-app.on("second-instance", (_event, argv) => {
-  const nextWorkspacePath = extractLaunchWorkspacePath(argv);
-  if (nextWorkspacePath) {
-    pendingLaunchWorkspacePath = nextWorkspacePath;
-  }
-  if (!mainWindow) {
-    return;
-  }
-
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
-  }
-  mainWindow.focus();
-
-  if (nextWorkspacePath) {
-    sendWorkspacePathToWindow(mainWindow, nextWorkspacePath);
-  }
-});
 
 app.whenReady().then(async () => {
   const window = await createWindow();
