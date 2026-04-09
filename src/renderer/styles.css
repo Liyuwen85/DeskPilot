@@ -1317,6 +1317,13 @@ input {
   box-shadow: 0 28px 90px rgba(15, 23, 42, 0.42);
 }
 
+.image-preview__panel--compact {
+  display: block;
+  width: min(560px, calc(100% - 64px));
+  height: auto;
+  max-height: min(520px, calc(100% - 64px));
+}
+
 .image-preview__media-wrap {
   display: flex;
   align-items: center;
@@ -1398,6 +1405,38 @@ input {
 .image-preview__action--danger {
   border-color: rgba(220, 38, 38, 0.28);
   color: #dc2626;
+}
+
+.math-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+
+.math-editor__title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.math-editor__textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--editor-surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+}
+
+.math-editor__textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border) 45%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .app-toast {

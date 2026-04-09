@@ -13,6 +13,7 @@ import { FileMenu } from "./components/FileMenu";
 import { Toast } from "./components/Toast";
 import { TreeView } from "./components/TreeView";
 import { useToast } from "./use-toast";
+import "katex/dist/katex.min.css";
 import "./styles.css";
 
 const RECENT_ITEMS_KEY = "deskpilot:recent-items";
@@ -2026,6 +2027,8 @@ function App() {
             markdownActions={activeMarkdownCommands ? {
               onHeading: (level) => activeMarkdownCommands.toggleHeading(level),
               onHorizontalRule: () => activeMarkdownCommands.insertHorizontalRule(),
+              onInlineMath: () => activeMarkdownCommands.insertInlineMath(),
+              onBlockMath: () => activeMarkdownCommands.insertBlockMath(),
               onImage: () => activeMarkdownCommands.insertImageFromFile()
             } : undefined}
           />

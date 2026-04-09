@@ -9,6 +9,8 @@ interface RecentItemLike {
 interface MarkdownMenuActions {
   onHeading: (level: number) => void;
   onHorizontalRule: () => void;
+  onInlineMath: () => void;
+  onBlockMath: () => void;
   onImage: () => void | Promise<void>;
 }
 
@@ -172,6 +174,12 @@ export function FileMenu({
             <div className="menu-dropdown__separator" />
             <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onHorizontalRule)}>
               <span className="menu-dropdown__label">分割线</span>
+            </button>
+            <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onInlineMath)}>
+              <span className="menu-dropdown__label">行内公式</span>
+            </button>
+            <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onBlockMath)}>
+              <span className="menu-dropdown__label">块级公式</span>
             </button>
             <button type="button" className="menu-dropdown__item" onClick={() => void handleAction(markdownActions.onImage)}>
               <span className="menu-dropdown__label">图片</span>

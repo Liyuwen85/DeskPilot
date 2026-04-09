@@ -1,5 +1,6 @@
 import React from "react";
 import Image from "@tiptap/extension-image";
+import Mathematics from "@tiptap/extension-mathematics";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
@@ -28,6 +29,8 @@ export interface TiptapOutlineApi {
 export interface TiptapCommandApi {
   toggleHeading: (level: number) => void;
   insertHorizontalRule: () => void;
+  insertInlineMath: () => void;
+  insertBlockMath: () => void;
   insertImageFromFile: () => Promise<void>;
 }
 
@@ -38,9 +41,23 @@ interface ImagePreviewState {
   title: string;
 }
 
+type MathNodeType = "inlineMath" | "blockMath";
+
+interface MathEditorState {
+  type: MathNodeType;
+  latex: string;
+  pos: number | null;
+}
+
 interface StoredSelection {
   anchor: number;
   head: number;
+}
+
+interface MathSelectionTarget {
+  type: MathNodeType;
+  latex: string;
+  pos: number;
 }
 
 function getTextFromNode(node: ProseMirrorNode): string {
@@ -195,6 +212,33 @@ function clampSelection(selection: StoredSelection, docSize: number): StoredSele
   };
 }
 
+function getMathSelectionTarget(
+  doc: ProseMirrorNode,
+  selection: StoredSelection | null | undefined
+): MathSelectionTarget | null {
+  if (!selection) {
+    return null;
+  }
+
+  const positions = Array.from(new Set([selection.anchor, selection.head]));
+  for (const pos of positions) {
+    const node = doc.nodeAt(pos);
+    if (!node) {
+      continue;
+    }
+
+    if (node.type.name === "inlineMath" || node.type.name === "blockMath") {
+      return {
+        type: node.type.name,
+        latex: String(node.attrs.latex || ""),
+        pos
+      };
+    }
+  }
+
+  return null;
+}
+
 interface TiptapTabPaneProps {
   tabPath: string;
   markdown: string;
@@ -228,6 +272,8 @@ export function TiptapTabPane({
   const [imageEditSrc, setImageEditSrc] = React.useState("");
   const [imageEditAlt, setImageEditAlt] = React.useState("");
   const [imageEditTitle, setImageEditTitle] = React.useState("");
+  const [mathEditor, setMathEditor] = React.useState<MathEditorState | null>(null);
+  const [mathLatex, setMathLatex] = React.useState("");
 
   const handleSaveKeyDownCapture = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const key = String(event.key || "").toLowerCase();
@@ -261,24 +307,35 @@ export function TiptapTabPane({
     setImageEditTitle("");
   }, []);
 
+  const closeMathEditor = React.useCallback(() => {
+    setMathEditor(null);
+    setMathLatex("");
+  }, []);
+
+  const openMathEditor = React.useCallback((nextState: MathEditorState) => {
+    setMathEditor(nextState);
+    setMathLatex(nextState.latex);
+  }, []);
+
   React.useEffect(() => {
     lastSyncedHtmlRef.current = resolvedHtml;
   }, [tabPath, resolvedHtml]);
 
   React.useEffect(() => {
-    if (!imagePreview) {
+    if (!imagePreview && !mathEditor) {
       return;
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         closeImagePreview();
+        closeMathEditor();
       }
     }
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [closeImagePreview, imagePreview]);
+  }, [closeImagePreview, closeMathEditor, imagePreview, mathEditor]);
 
   const emitOutline = React.useCallback((nextDoc: ProseMirrorNode) => {
     onOutlineChange?.(tabPath, getOutlineFromDocument(nextDoc));
@@ -298,6 +355,32 @@ export function TiptapTabPane({
         }
       }),
       Image,
+      Mathematics.configure({
+        inlineOptions: {
+          onClick: (node, pos) => {
+            rememberSelection(pos, pos);
+            openMathEditor({
+              type: "inlineMath",
+              latex: String(node.attrs.latex || ""),
+              pos
+            });
+          }
+        },
+        blockOptions: {
+          onClick: (node, pos) => {
+            rememberSelection(pos, pos);
+            openMathEditor({
+              type: "blockMath",
+              latex: String(node.attrs.latex || ""),
+              pos
+            });
+          }
+        },
+        katexOptions: {
+          throwOnError: false,
+          strict: "ignore"
+        }
+      }),
       Placeholder.configure({
         placeholder: UI_TEXT.editor.markdownPlaceholder
       })
@@ -344,7 +427,24 @@ export function TiptapTabPane({
       const { anchor, head } = nextEditor.state.selection;
       rememberSelection(anchor, head);
     }
-  });
+  }, [onSaveShortcut, emitOutline, onTextChange, rememberSelection, resolveHtmlImageSources, resolvedHtml, tabPath, openMathEditor]);
+
+  const restoreSelectionForCommand = React.useCallback(() => {
+    if (!editor) {
+      return null;
+    }
+
+    const chain = editor.chain().focus();
+    const storedSelection = lastKnownSelectionRef.current;
+    if (!storedSelection) {
+      chain.focus("end");
+      return chain;
+    }
+
+    const { anchor, head } = clampSelection(storedSelection, editor.state.doc.content.size);
+    chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+    return chain;
+  }, [editor]);
 
   const handleImageClickCapture = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (!editor) {
@@ -500,7 +600,6 @@ export function TiptapTabPane({
       return;
     }
 
-    const storedSelection = lastKnownSelectionRef.current;
     const selectedPath = await window.desktopApi.pickImageFile(getDirectoryPath(tabPath));
     if (!selectedPath) {
       return;
@@ -508,18 +607,69 @@ export function TiptapTabPane({
 
     const markdownDirectory = getDirectoryPath(tabPath);
     const nextPath = markdownDirectory ? toRelativePath(selectedPath, markdownDirectory) : selectedPath;
-    const chain = editor.chain().focus();
+    const chain = restoreSelectionForCommand();
+    if (!chain) {
+      return;
+    }
+    chain.setImage({ src: resolveImageSource(nextPath, tabPath) }).run();
+  }, [editor, restoreSelectionForCommand, tabPath]);
 
-    if (!storedSelection) {
-      chain.focus("end");
-    } else {
-      const docSize = editor.state.doc.content.size;
-      const { anchor, head } = clampSelection(storedSelection, docSize);
-      chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+  const handleOpenMathEditor = React.useCallback((type: MathNodeType) => {
+    if (!editor) {
+      return;
     }
 
-    chain.setImage({ src: resolveImageSource(nextPath, tabPath) }).run();
-  }, [editor, tabPath]);
+    const existingMath = getMathSelectionTarget(editor.state.doc, lastKnownSelectionRef.current);
+    if (existingMath) {
+      editor.chain().focus().setNodeSelection(existingMath.pos).run();
+      rememberSelection(existingMath.pos, existingMath.pos);
+      openMathEditor(existingMath);
+      return;
+    }
+
+    openMathEditor({
+      type,
+      latex: type === "inlineMath" ? "x^2" : "\\sum_{i=1}^{n} x_i",
+      pos: null
+    });
+  }, [editor, openMathEditor, rememberSelection]);
+
+  const handleMathSave = React.useCallback(() => {
+    if (!editor || !mathEditor) {
+      return;
+    }
+
+    const nextLatex = mathLatex.trim();
+    if (!nextLatex) {
+      return;
+    }
+
+    const existingMath = getMathSelectionTarget(editor.state.doc, lastKnownSelectionRef.current);
+    if (existingMath) {
+      const updateResult = existingMath.type === "inlineMath"
+        ? editor.chain().focus().setNodeSelection(existingMath.pos).updateInlineMath({ latex: nextLatex, pos: existingMath.pos }).run()
+        : editor.chain().focus().setNodeSelection(existingMath.pos).updateBlockMath({ latex: nextLatex, pos: existingMath.pos }).run();
+
+      if (updateResult) {
+        rememberSelection(existingMath.pos, existingMath.pos);
+        closeMathEditor();
+        return;
+      }
+    }
+
+    const chain = restoreSelectionForCommand();
+    if (!chain) {
+      return;
+    }
+
+    if (mathEditor.type === "inlineMath") {
+      chain.insertInlineMath({ latex: nextLatex }).run();
+    } else {
+      chain.insertBlockMath({ latex: nextLatex }).run();
+    }
+
+    closeMathEditor();
+  }, [closeMathEditor, editor, mathEditor, mathLatex, rememberSelection, restoreSelectionForCommand]);
 
   React.useEffect(() => {
     if (!editor) {
@@ -528,26 +678,24 @@ export function TiptapTabPane({
 
     onCommandApiReady?.(tabPath, {
       toggleHeading: (level: number) => {
-        const chain = editor.chain().focus();
-        const storedSelection = lastKnownSelectionRef.current;
-        if (!storedSelection) {
-          chain.focus("end");
-        } else {
-          const { anchor, head } = clampSelection(storedSelection, editor.state.doc.content.size);
-          chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+        const chain = restoreSelectionForCommand();
+        if (!chain) {
+          return;
         }
         chain.toggleHeading({ level: Math.max(1, Math.min(6, level)) as 1 | 2 | 3 | 4 | 5 | 6 }).run();
       },
       insertHorizontalRule: () => {
-        const chain = editor.chain().focus();
-        const storedSelection = lastKnownSelectionRef.current;
-        if (!storedSelection) {
-          chain.focus("end");
-        } else {
-          const { anchor, head } = clampSelection(storedSelection, editor.state.doc.content.size);
-          chain.setTextSelection(TextSelection.create(editor.state.doc, anchor, head));
+        const chain = restoreSelectionForCommand();
+        if (!chain) {
+          return;
         }
         chain.setHorizontalRule().run();
+      },
+      insertInlineMath: () => {
+        handleOpenMathEditor("inlineMath");
+      },
+      insertBlockMath: () => {
+        handleOpenMathEditor("blockMath");
       },
       insertImageFromFile: async () => {
         await handleInsertImageFromFile();
@@ -557,7 +705,7 @@ export function TiptapTabPane({
     return () => {
       onCommandApiReady?.(tabPath, null);
     };
-  }, [editor, handleInsertImageFromFile, onCommandApiReady, tabPath]);
+  }, [editor, handleInsertImageFromFile, handleOpenMathEditor, onCommandApiReady, restoreSelectionForCommand, tabPath]);
 
   return (
     <div className={`editor-shell editor-shell--tiptap ${active ? "" : "editor-shell--hidden"}`}>
@@ -612,6 +760,29 @@ export function TiptapTabPane({
                 <button type="button" className="image-preview__action" onClick={handleImageSave}>保存修改</button>
                 <button type="button" className="image-preview__action image-preview__action--danger" onClick={handleImageRemove}>删除图片</button>
                 <button type="button" className="image-preview__action" onClick={closeImagePreview}>关闭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {mathEditor ? (
+        <div className="image-preview" role="dialog" aria-modal="true" aria-label="公式编辑">
+          <button type="button" className="image-preview__backdrop" onClick={closeMathEditor} aria-label="关闭公式编辑" />
+          <div className="image-preview__panel image-preview__panel--compact">
+            <div className="math-editor">
+              <div className="math-editor__title">{mathEditor.type === "inlineMath" ? "行内公式" : "块级公式"}</div>
+              <label className="image-preview__field">
+                <span>LaTeX</span>
+                <textarea
+                  className="math-editor__textarea"
+                  value={mathLatex}
+                  onChange={(event) => setMathLatex(event.target.value)}
+                  placeholder={mathEditor.type === "inlineMath" ? "输入行内公式，如 x^2 + y^2" : "输入块级公式，如 \\sum_{i=1}^{n} x_i"}
+                />
+              </label>
+              <div className="image-preview__actions">
+                <button type="button" className="image-preview__action" onClick={handleMathSave}>保存公式</button>
+                <button type="button" className="image-preview__action" onClick={closeMathEditor}>关闭</button>
               </div>
             </div>
           </div>
