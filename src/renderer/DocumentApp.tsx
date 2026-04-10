@@ -53,6 +53,72 @@ function getBaseName(targetPath: string) {
   return segments[segments.length - 1] || normalized;
 }
 
+function getLanguageLabel(targetPath: string, kind?: string) {
+  if (kind === "markdown") {
+    return "Markdown";
+  }
+
+  if (kind !== "text") {
+    return "";
+  }
+
+  const normalizedPath = String(targetPath || "").toLowerCase();
+  const normalizedBaseName = normalizedPath.replace(/[\\/]+/g, "/").split("/").pop() || "";
+  const match = normalizedPath.match(/\.([a-z0-9.+_-]+)$/i);
+  const ext = match ? match[1] : "";
+
+  if (normalizedBaseName === "dockerfile" || ext === "dockerfile") {
+    return "Dockerfile";
+  }
+
+  const labels: Record<string, string> = {
+    txt: "Plain Text",
+    json: "JSON",
+    js: "JavaScript",
+    mjs: "JavaScript",
+    cjs: "JavaScript",
+    jsx: "JavaScript React",
+    ts: "TypeScript",
+    tsx: "TypeScript React",
+    py: "Python",
+    html: "HTML",
+    htm: "HTML",
+    css: "CSS",
+    scss: "SCSS",
+    sass: "Sass",
+    less: "Less",
+    xml: "XML",
+    svg: "SVG",
+    xhtml: "XHTML",
+    yml: "YAML",
+    yaml: "YAML",
+    md: "Markdown",
+    markdown: "Markdown",
+    mdx: "MDX",
+    sh: "Shell",
+    ps1: "PowerShell",
+    bat: "Batch",
+    java: "Java",
+    c: "C",
+    h: "C Header",
+    cc: "C++",
+    cpp: "C++",
+    cxx: "C++",
+    hpp: "C++ Header",
+    rs: "Rust",
+    go: "Go",
+    toml: "TOML",
+    ini: "INI",
+    log: "Log",
+    csv: "CSV",
+    sql: "SQL",
+    bash: "Shell",
+    zsh: "Shell"
+  };
+
+  return labels[ext] || (ext ? ext.toUpperCase() : "Plain Text");
+}
+
 function formatPreviewDuration(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
   const hours = Math.floor(safeSeconds / 3600);
@@ -308,6 +374,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const activeCharCount = activeTabText.length;
   const activeLineCount = activeTabText ? activeTabText.replace(/\r\n/g, "\n").split("\n").length : 0;
   const activePreviewStatus = tab ? previewStatusMap[tab.path] || null : null;
+  const activeLanguageLabel = tab ? getLanguageLabel(tab.path || targetPath, tab.kind) : "";
   const activeTabKindLabel = tab?.kind === "markdown"
     ? "Markdown"
     : tab?.kind === "image"
@@ -748,6 +815,9 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
           ) : null}
           {tab ? (
             <>
+              {!isPreviewTab && activeLanguageLabel ? (
+                <span className="statusbar__item">{activeLanguageLabel}</span>
+              ) : null}
               {!isPreviewTab ? (
                 <span className="statusbar__item">UTF-8</span>
               ) : null}

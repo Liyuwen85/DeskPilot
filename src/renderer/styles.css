@@ -1730,8 +1730,7 @@ input {
 }
 
 .code-view {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: block;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -1756,9 +1755,9 @@ input {
 }
 
 .editor-content--text {
-  padding: 18px 16px;
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 13px;
+  height: 100%;
 }
 
 .editor-content--textarea {
@@ -1767,8 +1766,28 @@ input {
   appearance: none;
 }
 
+.editor-content--codemirror {
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor-content--codemirror .cm-editor {
+  height: 100%;
+}
+
+.editor-content--codemirror .cm-search-match-current {
+  background: rgba(250, 204, 21, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(202, 138, 4, 0.35);
+  border-radius: 2px;
+}
+
+.editor-content--codemirror .cm-scroller {
+  overflow: auto;
+}
+
 .editor-content--tiptap .ProseMirror::-webkit-scrollbar,
 .editor-content--text::-webkit-scrollbar,
+.editor-content--codemirror .cm-scroller::-webkit-scrollbar,
 .tree::-webkit-scrollbar,
 .tabs::-webkit-scrollbar {
   width: var(--scrollbar-size);
@@ -1777,6 +1796,7 @@ input {
 
 .editor-content--tiptap .ProseMirror::-webkit-scrollbar-track,
 .editor-content--text::-webkit-scrollbar-track,
+.editor-content--codemirror .cm-scroller::-webkit-scrollbar-track,
 .tree::-webkit-scrollbar-track,
 .tabs::-webkit-scrollbar-track {
   background: var(--scrollbar-track);
@@ -1784,6 +1804,7 @@ input {
 
 .editor-content--tiptap .ProseMirror::-webkit-scrollbar-thumb,
 .editor-content--text::-webkit-scrollbar-thumb,
+.editor-content--codemirror .cm-scroller::-webkit-scrollbar-thumb,
 .tree::-webkit-scrollbar-thumb,
 .tabs::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
@@ -1791,6 +1812,7 @@ input {
 
 .editor-content--tiptap .ProseMirror::-webkit-scrollbar-thumb:hover,
 .editor-content--text::-webkit-scrollbar-thumb:hover,
+.editor-content--codemirror .cm-scroller::-webkit-scrollbar-thumb:hover,
 .tree::-webkit-scrollbar-thumb:hover,
 .tabs::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
