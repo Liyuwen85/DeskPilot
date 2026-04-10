@@ -13,7 +13,17 @@ const LazyTiptapTabPane = React.lazy(async () => {
   return { default: module.TiptapTabPane };
 });
 
-const MAX_MOUNTED_REGULAR_TABS = 4;
+const MAX_MOUNTED_TABS_BY_KIND: Record<FileTabLike["kind"], number> = {
+  markdown: 5,
+  text: 5,
+  image: 2,
+  audio: 2,
+  video: 2,
+  pdf: 2,
+  webpage: 5,
+  notebook: 5,
+  binary: 1
+};
 
 interface FileTabLike {
   path: string;
@@ -68,6 +78,13 @@ export const EditorHost = React.memo(function EditorHost({
   const [mountedTabPaths, setMountedTabPaths] = React.useState<string[]>(() => (
     activeTabPath ? [activeTabPath] : []
   ));
+  const tabMap = React.useMemo(() => {
+    const nextMap = new Map<string, FileTabLike>();
+    for (const tab of tabs) {
+      nextMap.set(tab.path, tab);
+    }
+    return nextMap;
+  }, [tabs]);
 
   React.useEffect(() => {
     setMountedTabPaths((previous) => {
@@ -83,17 +100,55 @@ export const EditorHost = React.memo(function EditorHost({
         return Array.from(new Set(persistedPaths));
       }
 
+      const mountedCounts = new Map<FileTabLike["kind"], number>();
+      const activeTab = tabs.find((tab) => tab.path === activeTabPath) || null;
+      const next: string[] = [];
+
+      const pushPath = (path: string) => {
+        const tab = tabMap.get(path);
+        if (!tab) {
+          return;
+        }
+
+        const currentCount = mountedCounts.get(tab.kind) || 0;
+        const limit = MAX_MOUNTED_TABS_BY_KIND[tab.kind] || 3;
+        if (currentCount >= limit) {
+          return;
+        }
+
+        mountedCounts.set(tab.kind, currentCount + 1);
+        next.push(path);
+      };
+
+      if (activeTab) {
+        pushPath(activeTab.path);
+      }
+
       const persistedPaths = filtered.filter((path) => stickyPaths.has(path) && path !== activeTabPath);
+      for (const path of persistedPaths) {
+        pushPath(path);
+      }
+
       const recentPaths = filtered.filter((path) => !stickyPaths.has(path) && path !== activeTabPath);
-      const next = [activeTabPath, ...persistedPaths, ...recentPaths];
-      const uniqueNext = Array.from(new Set(next)).slice(0, MAX_MOUNTED_REGULAR_TABS + persistedPaths.length);
+      for (const path of recentPaths) {
+        pushPath(path);
+      }
+
+      for (const tab of tabs) {
+        if (next.includes(tab.path)) {
+          continue;
+        }
+        pushPath(tab.path);
+      }
+
+      const uniqueNext = Array.from(new Set(next));
       // Reuse the previous array when nothing changed to avoid renderer update churn.
       if (previous.length === uniqueNext.length && previous.every((path, index) => path === uniqueNext[index])) {
         return previous;
       }
       return uniqueNext;
     });
-  }, [activeTabPath, tabs]);
+  }, [activeTabPath, tabMap, tabs]);
 
   if (!tabs.length || !activeTabPath) {
     return (
