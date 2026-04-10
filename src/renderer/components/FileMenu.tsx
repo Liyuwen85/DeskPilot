@@ -28,6 +28,18 @@ interface FormatMenuActions {
   onClearFormatting: () => void;
 }
 
+interface ViewMenuActions {
+  sourceModeEnabled?: boolean;
+  sourceModeActive?: boolean;
+  onToggleSourceMode?: () => void | Promise<void>;
+  showSidebarEnabled?: boolean;
+  showSidebarActive?: boolean;
+  onToggleSidebar?: () => void | Promise<void>;
+  showOutlineEnabled?: boolean;
+  showOutlineActive?: boolean;
+  onToggleOutline?: () => void | Promise<void>;
+}
+
 interface FileMenuProps {
   recentItems: RecentItemLike[];
   onNewTab: () => void | Promise<void>;
@@ -41,10 +53,11 @@ interface FileMenuProps {
   markdownEnabled?: boolean;
   markdownActions?: MarkdownMenuActions;
   formatActions?: FormatMenuActions;
+  viewActions?: ViewMenuActions;
   showFileMenu?: boolean;
 }
 
-type MenuKey = "file" | "markdown" | "format";
+type MenuKey = "file" | "markdown" | "format" | "view";
 
 export function FileMenu({
   recentItems,
@@ -59,6 +72,7 @@ export function FileMenu({
   markdownEnabled = false,
   markdownActions,
   formatActions,
+  viewActions,
   showFileMenu = true
 }: FileMenuProps) {
   const [openMenu, setOpenMenu] = React.useState<MenuKey | null>(null);
@@ -69,7 +83,8 @@ export function FileMenu({
     () => [
       { key: "file" as const, enabled: showFileMenu },
       { key: "markdown" as const, enabled: markdownEnabled },
-      { key: "format" as const, enabled: markdownEnabled }
+      { key: "format" as const, enabled: markdownEnabled },
+      { key: "view" as const, enabled: true }
     ],
     [markdownEnabled, showFileMenu]
   );
@@ -668,6 +683,70 @@ export function FileMenu({
             >
               <span className="menu-dropdown__label">清除格式</span>
               <span className="menu-dropdown__hint">Ctrl+\\</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="menu-dropdown" data-menu="view">
+        <button
+          type="button"
+          className={`menu-btn ${openMenu === "view" ? "menu-btn--active" : ""}`}
+          onMouseDown={preventFocusSteal}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openMenuWithKeyboard("view");
+            }
+          }}
+          onClick={() => {
+            setOpenMenu((current) => (current === "view" ? null : "view"));
+            setRecentOpen(false);
+          }}
+        >
+          视图
+        </button>
+        {openMenu === "view" ? (
+          <div className="menu-dropdown__panel">
+            <button
+              type="button"
+              className="menu-dropdown__item"
+              data-menu-nav-item="true"
+              disabled={!viewActions?.sourceModeEnabled}
+              onMouseDown={preventFocusSteal}
+              onClick={() => void handleAction(() => viewActions?.onToggleSourceMode?.())}
+            >
+              <span className="menu-dropdown__label">
+                <span className={`menu-check ${viewActions?.sourceModeActive ? "menu-check--active" : ""}`}>✓</span>
+                源码模式
+              </span>
+            </button>
+            <div className="menu-dropdown__separator" />
+            <button
+              type="button"
+              className="menu-dropdown__item"
+              data-menu-nav-item="true"
+              disabled={!viewActions?.showSidebarEnabled}
+              onMouseDown={preventFocusSteal}
+              onClick={() => void handleAction(() => viewActions?.onToggleSidebar?.())}
+            >
+              <span className="menu-dropdown__label">
+                <span className={`menu-check ${viewActions?.showSidebarActive ? "menu-check--active" : ""}`}>✓</span>
+                显示导航栏
+              </span>
+            </button>
+            <button
+              type="button"
+              className="menu-dropdown__item"
+              data-menu-nav-item="true"
+              disabled={!viewActions?.showOutlineEnabled}
+              onMouseDown={preventFocusSteal}
+              onClick={() => void handleAction(() => viewActions?.onToggleOutline?.())}
+            >
+              <span className="menu-dropdown__label">
+                <span className={`menu-check ${viewActions?.showOutlineActive ? "menu-check--active" : ""}`}>✓</span>
+                显示大纲
+              </span>
             </button>
           </div>
         ) : null}

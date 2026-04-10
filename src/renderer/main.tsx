@@ -464,6 +464,7 @@ function App() {
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outlineMap, setOutlineMap] = React.useState<Record<string, TiptapOutlineItem[]>>({});
   const [previewStatusMap, setPreviewStatusMap] = React.useState<Record<string, any>>({});
+  const [markdownSourceModeMap, setMarkdownSourceModeMap] = React.useState<Record<string, boolean>>({});
   const [detachedDocumentPaths, setDetachedDocumentPaths] = React.useState<Set<string>>(() => new Set<string>());
   const [isRestoringWorkspace, setIsRestoringWorkspace] = React.useState(true);
   const searchInputRef = React.useRef(null);
@@ -561,6 +562,10 @@ function App() {
       return nextEntries.length === Object.keys(previous).length ? previous : Object.fromEntries(nextEntries);
     });
     setPreviewStatusMap((previous) => {
+      const nextEntries = Object.entries(previous).filter(([tabPath]) => availablePaths.has(tabPath));
+      return nextEntries.length === Object.keys(previous).length ? previous : Object.fromEntries(nextEntries);
+    });
+    setMarkdownSourceModeMap((previous) => {
       const nextEntries = Object.entries(previous).filter(([tabPath]) => availablePaths.has(tabPath));
       return nextEntries.length === Object.keys(previous).length ? previous : Object.fromEntries(nextEntries);
     });
@@ -718,6 +723,7 @@ function App() {
   const contextMenuTab = tabContextMenu ? tabs.find((tab) => tab.path === tabContextMenu.path) || null : null;
   const contextMenuTabIndex = contextMenuTab ? tabs.findIndex((tab) => tab.path === contextMenuTab.path) : -1;
   const activeMarkdownDraft = activeTab ? markdownDraftMap[activeTab.path] : null;
+  const activeMarkdownSourceMode = Boolean(activeTab?.kind === "markdown" && markdownSourceModeMap[activeTab.path]);
   const activeTabText = activeTab
       ? activeTab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[activeTab.path] ?? activeTab.content)
@@ -866,6 +872,72 @@ function App() {
     setRecentItems((previous) => {
       const next = [entry, ...previous.filter((item) => !(item.kind === entry.kind && item.path === entry.path))];
       return next.slice(0, 10);
+    });
+  }, []);
+
+  const toggleActiveMarkdownSourceMode = React.useCallback(() => {
+    const currentPath = activeTabPathRef.current;
+    const currentTab = tabsRef.current.find((tab) => tab.path === currentPath);
+    if (!currentTab || currentTab.kind !== "markdown") {
+      return;
+    }
+
+    setMarkdownSourceModeMap((previous) => {
+      const nextActive = !previous[currentTab.path];
+
+      setMarkdownDraftMap((draftPrevious) => {
+        const currentDraft = draftPrevious[currentTab.path];
+        const sourceText = normalizeText(currentDraft?.text ?? savedTextMapRef.current[currentTab.path] ?? currentTab.content);
+
+        if (!nextActive) {
+          if (!currentDraft?.isDirty) {
+            if (!(currentTab.path in draftPrevious)) {
+              return draftPrevious;
+            }
+
+            const next = { ...draftPrevious };
+            delete next[currentTab.path];
+            markdownDraftMapRef.current = next;
+            return next;
+          }
+
+          const next = {
+            ...draftPrevious,
+            [currentTab.path]: {
+              ...currentDraft,
+              text: sourceText,
+              html: null,
+              sourceMode: false
+            }
+          };
+          markdownDraftMapRef.current = next;
+          return next;
+        }
+
+        const next = {
+          ...draftPrevious,
+          [currentTab.path]: {
+            html: null,
+            text: sourceText,
+            isDirty: Boolean(currentDraft?.isDirty),
+            sourceMode: true
+          }
+        };
+        markdownDraftMapRef.current = next;
+        return next;
+      });
+
+      if (nextActive) {
+        return { ...previous, [currentTab.path]: true };
+      }
+
+      if (!(currentTab.path in previous)) {
+        return previous;
+      }
+
+      const next = { ...previous };
+      delete next[currentTab.path];
+      return next;
     });
   }, []);
 
@@ -1440,16 +1512,49 @@ function App() {
     }
 
     if (tab.kind === "markdown") {
+      if (typeof nextText === "string" || markdownSourceModeMap[filePath]) {
+        const content = normalizeText(nextText);
+        const savedContent = normalizeText(savedTextMapRef.current[filePath] ?? tab.content);
+
+        setMarkdownDraftMap((previous) => {
+          const isDirty = content !== savedContent;
+          if (!isDirty) {
+            if (!(filePath in previous)) {
+              return previous;
+            }
+
+            const next = { ...previous };
+            delete next[filePath];
+            markdownDraftMapRef.current = next;
+            return next;
+          }
+
+          const next = {
+            ...previous,
+            [filePath]: {
+              html: null,
+              text: content,
+              isDirty: true,
+              sourceMode: true
+            }
+          };
+          markdownDraftMapRef.current = next;
+          return next;
+        });
+        return;
+      }
+
       setMarkdownDraftMap((previous) => {
         const current = previous[filePath];
-        if (current?.html === nextText?.html && current?.text === nextText?.text) {
+        if (current?.html === nextText?.html && current?.text === nextText?.text && current?.sourceMode === false) {
           return previous;
         }
 
         const nextDraft = {
           html: normalizeText(nextText?.html),
           text: normalizeText(nextText?.text),
-          isDirty: Boolean(nextText?.isDirty)
+          isDirty: Boolean(nextText?.isDirty),
+          sourceMode: false
         };
         if (!nextDraft.isDirty) {
           if (!(filePath in previous)) {
@@ -1482,7 +1587,7 @@ function App() {
         [filePath]: normalizeText(nextText)
       };
     });
-  }, []);
+  }, [markdownSourceModeMap]);
 
   const applySavedContent = React.useCallback(({ filePath, content }) => {
     setSavedTextMap((previous) => ({
@@ -2328,7 +2433,7 @@ function App() {
             onSave={saveActiveFileWithToast}
             onSaveAs={saveCurrentAsWithToast}
             onQuit={() => void attemptCloseWindow()}
-            markdownEnabled={activeTab?.kind === "markdown"}
+            markdownEnabled={activeTab?.kind === "markdown" && !activeMarkdownSourceMode}
             formatActions={activeTab?.kind === "markdown" ? {
               onBold: () => runActiveMarkdownCommand((api) => api.toggleBold()),
               onItalic: () => runActiveMarkdownCommand((api) => api.toggleItalic()),
@@ -2349,6 +2454,17 @@ function App() {
               onBlockMath: () => runActiveMarkdownCommand((api) => api.insertBlockMath()),
               onImage: () => runActiveMarkdownCommand((api) => api.insertImageFromFile())
             } : undefined}
+            viewActions={{
+              sourceModeEnabled: activeTab?.kind === "markdown",
+              sourceModeActive: activeMarkdownSourceMode,
+              onToggleSourceMode: toggleActiveMarkdownSourceMode,
+              showSidebarEnabled: true,
+              showSidebarActive: sidebarVisible,
+              onToggleSidebar: () => setSidebarVisible((previous) => !previous),
+              showOutlineEnabled: canToggleOutline,
+              showOutlineActive: showOutlinePane,
+              onToggleOutline: () => setOutlineOpen((previous) => !previous)
+            }}
           />
         </div>
 
@@ -2507,13 +2623,14 @@ function App() {
               </div>
             ) : (
               <div className={`viewer__layout ${showOutlinePane ? "viewer__layout--with-outline" : ""}`}>
-                <EditorHost
-                  tabs={tabs}
-                  activeTabPath={activeTabPath}
-                  markdownDraftMap={markdownDraftMap}
-                  textContentMap={tabTextMap}
-                  onTextChange={handleTabTextChange}
-                  onSaveShortcut={() => void saveActiveFileWithToast()}
+            <EditorHost
+              tabs={tabs}
+              activeTabPath={activeTabPath}
+              markdownDraftMap={markdownDraftMap}
+              markdownSourceModeMap={markdownSourceModeMap}
+              textContentMap={tabTextMap}
+              onTextChange={handleTabTextChange}
+              onSaveShortcut={() => void saveActiveFileWithToast()}
                   onOutlineChange={handleOutlineChange}
                   onOutlineApiReady={handleOutlineApiReady}
                   onCommandApiReady={handleCommandApiReady}
@@ -2592,10 +2709,19 @@ function App() {
         </div>
         <div className="statusbar__right">
           {isEditableTab ? (
-            <>
-              <button type="button" className="statusbar__item" onClick={() => void saveActiveFileWithToast()}>{UI_TEXT.statusbar.save}</button>
-              <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
-            </>
+            activeTab?.kind === "markdown" ? (
+              <>
+                {activeMarkdownSourceMode ? (
+                  <span className="statusbar__item">源码模式</span>
+                ) : null}
+                <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="statusbar__item" onClick={() => void saveActiveFileWithToast()}>{UI_TEXT.statusbar.save}</button>
+                <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
+              </>
+            )
           ) : null}
           {canToggleOutline ? (
             <button

@@ -85,6 +85,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const [savedTextMap, setSavedTextMap] = React.useState<Record<string, string | undefined>>({});
   const [markdownDraftMap, setMarkdownDraftMap] = React.useState<Record<string, any>>({});
   const [previewStatusMap, setPreviewStatusMap] = React.useState<Record<string, any>>({});
+  const [markdownSourceMode, setMarkdownSourceMode] = React.useState(false);
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outlineItems, setOutlineItems] = React.useState<TiptapOutlineItem[]>([]);
   const [isMaximized, setIsMaximized] = React.useState(false);
@@ -138,6 +139,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
         setTabTextMap({ [file.path]: content });
         setSavedTextMap({ [file.path]: content });
         setMarkdownDraftMap({});
+        setMarkdownSourceMode(false);
         setPreviewStatusMap({});
         setOutlineItems([]);
         setLoadError("");
@@ -280,6 +282,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   }, [attemptCloseWindow]);
 
   const activeMarkdownDraft = tab ? markdownDraftMap[tab.path] : null;
+  const activeMarkdownSourceMode = Boolean(tab?.kind === "markdown" && markdownSourceMode);
   const activeTabText = tab
     ? tab.kind === "markdown"
       ? normalizeText(activeMarkdownDraft?.text ?? savedTextMap[tab.path] ?? tab.content)
@@ -358,16 +361,45 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
     }
 
     if (currentTab.kind === "markdown") {
+      if (typeof nextText === "string" || markdownSourceMode) {
+        const content = normalizeText(nextText);
+        const savedContent = normalizeText(savedTextMapRef.current[filePath] ?? currentTab.content);
+        setMarkdownDraftMap((previous) => {
+          const isDirty = content !== savedContent;
+          if (!isDirty) {
+            if (!(filePath in previous)) {
+              return previous;
+            }
+
+            const next = { ...previous };
+            delete next[filePath];
+            return next;
+          }
+
+          return {
+            ...previous,
+            [filePath]: {
+              html: null,
+              text: content,
+              isDirty: true,
+              sourceMode: true
+            }
+          };
+        });
+        return;
+      }
+
       setMarkdownDraftMap((previous) => {
         const current = previous[filePath];
-        if (current?.html === nextText?.html && current?.text === nextText?.text && current?.isDirty === Boolean(nextText?.isDirty)) {
+        if (current?.html === nextText?.html && current?.text === nextText?.text && current?.isDirty === Boolean(nextText?.isDirty) && current?.sourceMode === false) {
           return previous;
         }
 
         const nextDraft = {
           html: normalizeText(nextText?.html),
           text: normalizeText(nextText?.text),
-          isDirty: Boolean(nextText?.isDirty)
+          isDirty: Boolean(nextText?.isDirty),
+          sourceMode: false
         };
 
         if (!nextDraft.isDirty) {
@@ -391,7 +423,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
     const content = normalizeText(nextText);
     setTabTextMap((previous) => ({ ...previous, [filePath]: content }));
     setTab((previous: any) => (previous && previous.path === filePath ? { ...previous, content } : previous));
-  }, []);
+  }, [markdownSourceMode]);
 
   const copyActiveContent = React.useCallback(async () => {
     if (!activeTabText) {
@@ -435,6 +467,55 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
         return next;
       }
       return { ...previous, [tabPath]: status };
+    });
+  }, []);
+
+  const toggleMarkdownSourceMode = React.useCallback(() => {
+    const currentTab = tabRef.current;
+    if (!currentTab || currentTab.kind !== "markdown") {
+      return;
+    }
+
+    setMarkdownSourceMode((previous) => {
+      const nextActive = !previous;
+      setMarkdownDraftMap((draftPrevious) => {
+        const currentDraft = draftPrevious[currentTab.path];
+        const sourceText = normalizeText(currentDraft?.text ?? savedTextMapRef.current[currentTab.path] ?? currentTab.content);
+
+        if (!nextActive) {
+          if (!currentDraft?.isDirty) {
+            if (!(currentTab.path in draftPrevious)) {
+              return draftPrevious;
+            }
+
+            const next = { ...draftPrevious };
+            delete next[currentTab.path];
+            return next;
+          }
+
+          return {
+            ...draftPrevious,
+            [currentTab.path]: {
+              ...currentDraft,
+              text: sourceText,
+              html: null,
+              sourceMode: false
+            }
+          };
+        }
+
+        return {
+          ...draftPrevious,
+          [currentTab.path]: {
+            html: null,
+            text: sourceText,
+            isDirty: Boolean(currentDraft?.isDirty),
+            sourceMode: true
+          }
+        };
+      });
+
+      return nextActive;
     });
   }, []);
 
@@ -493,7 +574,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
             onSave={() => void saveCurrentWithToast()}
             onSaveAs={() => void saveTabAsByPath(tabRef.current?.path || "")}
             onQuit={() => void attemptCloseWindow()}
-            markdownEnabled={tab?.kind === "markdown"}
+            markdownEnabled={tab?.kind === "markdown" && !activeMarkdownSourceMode}
             formatActions={tab?.kind === "markdown" ? {
               onBold: () => runMarkdownCommand((api) => api.toggleBold()),
               onItalic: () => runMarkdownCommand((api) => api.toggleItalic()),
@@ -514,6 +595,16 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
               onBlockMath: () => runMarkdownCommand((api) => api.insertBlockMath()),
               onImage: () => runMarkdownCommand((api) => api.insertImageFromFile())
             } : undefined}
+            viewActions={{
+              sourceModeEnabled: tab?.kind === "markdown",
+              sourceModeActive: activeMarkdownSourceMode,
+              onToggleSourceMode: toggleMarkdownSourceMode,
+              showSidebarEnabled: false,
+              showSidebarActive: false,
+              showOutlineEnabled: canToggleOutline,
+              showOutlineActive: showOutlinePane,
+              onToggleOutline: () => setOutlineOpen((previous) => !previous)
+            }}
           />
         </div>
 
@@ -548,6 +639,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
               tabs={editorTabs}
               activeTabPath={tab?.path || null}
               markdownDraftMap={markdownDraftMap}
+              markdownSourceModeMap={tab?.path ? { [tab.path]: markdownSourceMode } : {}}
               textContentMap={tabTextMap}
               onTextChange={handleTextChange}
               onSaveShortcut={() => void saveCurrentWithToast()}
@@ -604,10 +696,19 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
         </div>
         <div className="statusbar__right">
           {!isPreviewTab ? (
-            <>
-              <button type="button" className="statusbar__item" onClick={() => void saveCurrentWithToast()}>{UI_TEXT.statusbar.save}</button>
-              <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
-            </>
+            tab?.kind === "markdown" ? (
+              <>
+                {activeMarkdownSourceMode ? (
+                  <span className="statusbar__item">源码模式</span>
+                ) : null}
+                <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="statusbar__item" onClick={() => void saveCurrentWithToast()}>{UI_TEXT.statusbar.save}</button>
+                <button type="button" className="statusbar__item" onClick={() => void copyActiveContent()}>{UI_TEXT.statusbar.copy}</button>
+              </>
+            )
           ) : null}
           {canToggleOutline ? (
             <button
@@ -620,7 +721,6 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
           ) : null}
           {tab ? (
             <>
-              <span className="statusbar__item">{activeTabKindLabel}</span>
               {!isPreviewTab ? (
                 <span className="statusbar__item">UTF-8</span>
               ) : null}

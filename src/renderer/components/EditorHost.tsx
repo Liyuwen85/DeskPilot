@@ -21,8 +21,9 @@ interface FileTabLike {
 }
 
 interface MarkdownDraftLike {
-  html: string;
-  text: string;
+  html?: string | null;
+  text?: string | null;
+  sourceMode?: boolean;
 }
 
 interface PreviewStatusLike {
@@ -39,6 +40,7 @@ interface EditorHostProps {
   tabs: FileTabLike[];
   activeTabPath: string | null;
   markdownDraftMap: Record<string, MarkdownDraftLike | undefined>;
+  markdownSourceModeMap?: Record<string, boolean | undefined>;
   textContentMap: Record<string, string | undefined>;
   onTextChange: (tabPath: string, value: string | MarkdownDraftLike) => void;
   onSaveShortcut: () => void;
@@ -52,6 +54,7 @@ export const EditorHost = React.memo(function EditorHost({
   tabs,
   activeTabPath,
   markdownDraftMap,
+  markdownSourceModeMap = {},
   textContentMap,
   onTextChange,
   onSaveShortcut,
@@ -106,12 +109,26 @@ export const EditorHost = React.memo(function EditorHost({
       {mountedTabs.map((tab) => {
         const active = tab.path === activeTabPath;
         if (tab.kind === "markdown") {
+          const markdownDraft = markdownDraftMap[tab.path];
+          if (markdownSourceModeMap[tab.path]) {
+            return (
+              <TextTabPane
+                key={tab.path}
+                tabPath={tab.path}
+                content={markdownDraft?.text ?? tab.content}
+                active={active}
+                onTextChange={onTextChange}
+                onSaveShortcut={onSaveShortcut}
+              />
+            );
+          }
+
           return (
             <React.Suspense key={tab.path} fallback={active ? <div className="viewer__loading">{UI_TEXT.editor.loadingMarkdown}</div> : null}>
               <LazyTiptapTabPane
                 tabPath={tab.path}
-                markdown={tab.content}
-                draftHtml={markdownDraftMap[tab.path]?.html ?? null}
+                markdown={markdownDraft?.text ?? tab.content}
+                draftHtml={markdownDraft?.html ?? null}
                 active={active}
                 onTextChange={onTextChange}
                 onSaveShortcut={onSaveShortcut}

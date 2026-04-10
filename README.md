@@ -11,7 +11,9 @@ DeskPilot is a simple and lightweight Markdown editor.
 - [x] Edit Markdown
 - [x] Edit other text file types
 - [x] Preview web pages / PDF / media files
-- [ ] Implement all menu features
+- [x] Preview jupyter notebook file
+- [x] Implement all menu features
+- [ ] Edit table
 - [ ] Multi-language support
 - [ ] Enhance full-text search (RetrievalBoost)
 - [ ] Add an AI assistant

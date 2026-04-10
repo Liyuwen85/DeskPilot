@@ -20,9 +20,17 @@ function normalizeText(value: unknown): string {
 }
 
 export async function serializeMarkdownDraftAsync(
-  draft: { html?: string | null } | null | undefined,
+  draft: { html?: string | null; text?: string | null; sourceMode?: boolean } | null | undefined,
   fallbackContent = ""
 ): Promise<string> {
+  if (draft?.sourceMode && typeof draft.text === "string") {
+    return normalizeText(draft.text);
+  }
+
+  if (typeof draft?.text === "string" && typeof draft?.html !== "string") {
+    return normalizeText(draft.text);
+  }
+
   if (!draft || typeof draft.html !== "string") {
     return normalizeText(fallbackContent);
   }
