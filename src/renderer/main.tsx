@@ -548,7 +548,7 @@ function App() {
   const [dragOverTab, setDragOverTab] = React.useState(null);
   const [recentItems, setRecentItems] = React.useState(() => loadRecentItems());
   const [sidebarWidth, setSidebarWidth] = React.useState(() => loadSidebarWidth());
-  const [indexedFiles, setIndexedFiles] = React.useState<any[]>([]);
+  const [workspaceSearchResults, setWorkspaceSearchResults] = React.useState<any[]>([]);
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outlineMap, setOutlineMap] = React.useState<Record<string, TiptapOutlineItem[]>>({});
   const [previewStatusMap, setPreviewStatusMap] = React.useState<Record<string, any>>({});
@@ -573,47 +573,9 @@ function App() {
   const detachedDocumentPathsRef = React.useRef(detachedDocumentPaths);
   const outlineApiMapRef = React.useRef(new Map<string, TiptapOutlineApi>());
   const commandApiMapRef = React.useRef(new Map<string, TiptapCommandApi>());
-  // Keep workspace indexing on-demand only; eager reindexing previously caused major memory growth.
-  const indexedFilesRootPathRef = React.useRef("");
-  const searchIndexTaskRef = React.useRef<Promise<void> | null>(null);
+  const searchRequestIdRef = React.useRef(0);
   const { toast, showSuccess, showError } = useToast();
-
-  const refreshSearchIndex = React.useCallback(async (workspaceRootPath) => {
-    const nextRootPath = String(workspaceRootPath || "").trim();
-    if (!nextRootPath) {
-      indexedFilesRootPathRef.current = "";
-      setIndexedFiles([]);
-      return;
-    }
-
-    if (!searchOpen) {
-      return;
-    }
-
-    if (indexedFilesRootPathRef.current === nextRootPath && indexedFiles.length > 0) {
-      return;
-    }
-
-    if (searchIndexTaskRef.current) {
-      return searchIndexTaskRef.current;
-    }
-
-    const task = (async () => {
-      try {
-        const files = await window.desktopApi.indexWorkspaceFiles(nextRootPath);
-        indexedFilesRootPathRef.current = nextRootPath;
-        setIndexedFiles(Array.isArray(files) ? files : []);
-      } catch {
-        indexedFilesRootPathRef.current = "";
-        setIndexedFiles([]);
-      } finally {
-        searchIndexTaskRef.current = null;
-      }
-    })();
-
-    searchIndexTaskRef.current = task;
-    return task;
-  }, [indexedFiles.length, searchOpen]);
+  const deferredSearchQuery = React.useDeferredValue(searchQuery);
 
   React.useEffect(() => {
     treeRef.current = tree;
@@ -731,15 +693,43 @@ function App() {
   React.useEffect(() => {
     if (searchOpen) {
       searchInputRef.current?.focus();
-      void refreshSearchIndex(rootPath);
+      return;
+    }
+  }, [searchOpen]);
+
+  React.useEffect(() => {
+    if (!searchOpen) {
+      searchRequestIdRef.current += 1;
+      setWorkspaceSearchResults([]);
       return;
     }
 
-    // Release the cached file list as soon as search closes.
-    indexedFilesRootPathRef.current = "";
-    searchIndexTaskRef.current = null;
-    setIndexedFiles([]);
-  }, [refreshSearchIndex, rootPath, searchOpen]);
+    const query = deferredSearchQuery.trim();
+    const workspaceRootPath = String(rootPath || "").trim();
+    if (!workspaceRootPath || !query) {
+      setWorkspaceSearchResults([]);
+      return;
+    }
+
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+
+    void window.desktopApi.searchWorkspaceFiles(workspaceRootPath, query, 8)
+      .then((results) => {
+        if (searchRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setWorkspaceSearchResults(Array.isArray(results) ? results : []);
+      })
+      .catch(() => {
+        if (searchRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setWorkspaceSearchResults([]);
+      });
+  }, [deferredSearchQuery, rootPath, searchOpen]);
 
   const getPersistedContentForTab = React.useCallback(async (tab) => {
     if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook") {
@@ -808,7 +798,6 @@ function App() {
   }, [tabContextMenu, treeContextMenu]);
 
   const activeTab = tabs.find((tab) => tab.path === activeTabPath) || null;
-  const deferredSearchQuery = React.useDeferredValue(searchQuery);
   const contextMenuTab = tabContextMenu ? tabs.find((tab) => tab.path === tabContextMenu.path) || null : null;
   const contextMenuTabIndex = contextMenuTab ? tabs.findIndex((tab) => tab.path === contextMenuTab.path) : -1;
   const tabContextMenuPosition = clampContextMenuPosition(tabContextMenu, TAB_CONTEXT_MENU_SIZE);
@@ -854,13 +843,6 @@ function App() {
   );
   const isEditableTab = Boolean(activeTab && !isPreviewTab && activeTab.kind !== "binary");
   const activeCharCount = activeTabText.length;
-  const indexedSearchFiles = React.useMemo(() => (
-    indexedFiles.map((file) => ({
-      ...file,
-      searchName: String(file.name || "").toLowerCase(),
-      searchPath: String(file.path || "").toLowerCase()
-    }))
-  ), [indexedFiles]);
   const indexedSearchTabs = React.useMemo(() => (
     tabs.map((tab) => ({
       ...tab,
@@ -1999,6 +1981,13 @@ function App() {
     setDragOverTab(null);
   }, []);
 
+  const openCommandSearch = React.useCallback(() => {
+    setSearchOpen(true);
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+  }, []);
+
   React.useEffect(() => {
     function handleKeyDown(event) {
       const key = event.key.toLowerCase();
@@ -2023,11 +2012,17 @@ function App() {
         event.stopPropagation();
         void createTemporaryTabAction();
       }
+
+      if ((event.ctrlKey || event.metaKey) && key === "r") {
+        event.preventDefault();
+        event.stopPropagation();
+        openCommandSearch();
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [createTemporaryTabAction, openFileDialog, saveActiveFileWithToast, saveCurrentAsWithToast]);
+  }, [createTemporaryTabAction, openCommandSearch, openFileDialog, saveActiveFileWithToast, saveCurrentAsWithToast]);
 
   React.useEffect(() => {
     return window.desktopApi.onRequestWindowClose(() => {
@@ -2136,10 +2131,8 @@ function App() {
       }));
 
     const tabPaths = new Set(tabResults.map((item) => item.path));
-    const fileResults = indexedSearchFiles
-      .filter((file) => file.searchName.includes(query) || file.searchPath.includes(query))
+    const fileResults = workspaceSearchResults
       .filter((file) => !tabPaths.has(file.path))
-      .slice(0, 8)
       .map((file) => ({
         id: `file:${file.path}`,
         label: file.name,
@@ -2149,7 +2142,7 @@ function App() {
       }));
 
     return [...tabResults, ...fileResults].slice(0, 10);
-  }, [deferredSearchQuery, indexedSearchFiles, indexedSearchTabs, searchOpen]);
+  }, [deferredSearchQuery, indexedSearchTabs, searchOpen, workspaceSearchResults]);
 
   const handleTreeFileOpen = React.useCallback(async (filePath, fileName) => {
     await openFile(filePath);

@@ -32,6 +32,33 @@ export const CommandSearch = React.memo(function CommandSearch({
   onQueryChange,
   onSelect
 }: CommandSearchProps) {
+  const [activeIndex, setActiveIndex] = React.useState(-1);
+  const resultRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+
+  React.useEffect(() => {
+    if (!searchOpen || !searchQuery.trim() || searchResults.length === 0) {
+      setActiveIndex(-1);
+      return;
+    }
+
+    setActiveIndex((previous) => {
+      if (previous >= 0 && previous < searchResults.length) {
+        return previous;
+      }
+      return 0;
+    });
+  }, [searchOpen, searchQuery, searchResults]);
+
+  React.useEffect(() => {
+    if (activeIndex < 0) {
+      return;
+    }
+
+    resultRefs.current[activeIndex]?.scrollIntoView({
+      block: "nearest"
+    });
+  }, [activeIndex]);
+
   return (
     <div className={`command-box ${searchOpen ? "command-box--open" : ""}`} ref={searchBoxRef}>
       <div
@@ -44,23 +71,54 @@ export const CommandSearch = React.memo(function CommandSearch({
       >
         <span className="command-box__icon">{UI_TEXT.search.icon}</span>
         {searchOpen ? (
-          <input
-            ref={searchInputRef}
-            className="command-box__input"
-            value={searchQuery}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={UI_TEXT.search.inputPlaceholder}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onClose();
-              }
-            }}
-          />
+          <>
+            <input
+              ref={searchInputRef}
+              className="command-box__input"
+              value={searchQuery}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder={UI_TEXT.search.inputPlaceholder}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" && searchResults.length > 0) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setActiveIndex((previous) => (
+                    previous < 0 ? 0 : (previous + 1) % searchResults.length
+                  ));
+                  return;
+                }
+
+                if (event.key === "ArrowUp" && searchResults.length > 0) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setActiveIndex((previous) => (
+                    previous < 0 ? searchResults.length - 1 : (previous - 1 + searchResults.length) % searchResults.length
+                  ));
+                  return;
+                }
+
+                if (event.key === "Enter" && activeIndex >= 0 && activeIndex < searchResults.length) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onSelect(searchResults[activeIndex].path);
+                  return;
+                }
+
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onClose();
+                }
+              }}
+            />
+            <span className="command-box__hint">Ctrl+R</span>
+          </>
         ) : (
-          <span className="command-box__placeholder">{UI_TEXT.search.placeholder}</span>
+          <>
+            <span className="command-box__placeholder">{UI_TEXT.search.placeholder}</span>
+            <span className="command-box__hint">Ctrl+R</span>
+          </>
         )}
       </div>
 
@@ -71,9 +129,18 @@ export const CommandSearch = React.memo(function CommandSearch({
               searchResults.map((item) => (
                 <button
                   key={item.id}
+                  ref={(element) => {
+                    const index = searchResults.findIndex((result) => result.id === item.id);
+                    resultRefs.current[index] = element;
+                  }}
                   type="button"
-                  className="command-result"
+                  className={`command-result ${searchResults[activeIndex]?.id === item.id ? "command-result--active" : ""}`}
+                  aria-selected={searchResults[activeIndex]?.id === item.id}
                   onClick={() => onSelect(item.path)}
+                  onMouseEnter={() => {
+                    const index = searchResults.findIndex((result) => result.id === item.id);
+                    setActiveIndex(index);
+                  }}
                 >
                   <span className="command-result__main">
                     <span className="command-result__label">{item.label}</span>

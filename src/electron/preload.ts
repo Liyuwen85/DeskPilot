@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   confirmCloseWindow: (payload: ConfirmClosePayload) => ipcRenderer.invoke("dialog:confirm-close-window", payload),
   openWorkspacePath: (targetPath: string) => ipcRenderer.invoke("workspace:open-path", targetPath),
   indexWorkspaceFiles: (rootPath: string) => ipcRenderer.invoke("workspace:index-files", rootPath),
+  searchWorkspaceFiles: (rootPath: string, query: string, limit?: number) => ipcRenderer.invoke("workspace:search-files", rootPath, query, limit),
   readDirectory: (directoryPath: string) => ipcRenderer.invoke("workspace:read-directory", directoryPath),
   readFile: (filePath: string) => ipcRenderer.invoke("viewer:read", filePath),
   getFileStats: (filePath: string) => ipcRenderer.invoke("viewer:stat", filePath),

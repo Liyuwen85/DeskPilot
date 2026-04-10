@@ -326,6 +326,62 @@ async function indexWorkspaceFiles(rootPath: string): Promise<WorkspaceIndexEntr
   return results;
 }
 
+async function searchWorkspaceFiles(rootPath: string, query: string, limit = 8): Promise<WorkspaceIndexEntry[]> {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const normalizedLimit = Math.max(1, Math.min(50, Number(limit) || 8));
+  const results: WorkspaceIndexEntry[] = [];
+  const skippedDirectories = new Set([".git", "node_modules", "dist", "build", "out", "coverage"]);
+
+  if (!normalizedQuery) {
+    return results;
+  }
+
+  async function visitDirectory(directoryPath: string): Promise<void> {
+    if (results.length >= normalizedLimit) {
+      return;
+    }
+
+    const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+    const visibleEntries = entries
+      .filter((entry) => !entry.name.startsWith("."))
+      .sort((left, right) => {
+        if (left.isDirectory() && !right.isDirectory()) return -1;
+        if (!left.isDirectory() && right.isDirectory()) return 1;
+        return left.name.localeCompare(right.name, "zh-CN");
+      });
+
+    for (const entry of visibleEntries) {
+      if (results.length >= normalizedLimit) {
+        return;
+      }
+
+      const entryPath = path.join(directoryPath, entry.name);
+      if (entry.isDirectory()) {
+        if (skippedDirectories.has(entry.name)) {
+          continue;
+        }
+
+        await visitDirectory(entryPath);
+        continue;
+      }
+
+      const searchName = entry.name.toLowerCase();
+      const searchPath = entryPath.toLowerCase();
+      if (!searchName.includes(normalizedQuery) && !searchPath.includes(normalizedQuery)) {
+        continue;
+      }
+
+      results.push({
+        name: entry.name,
+        path: entryPath
+      });
+    }
+  }
+
+  await visitDirectory(rootPath);
+  return results;
+}
+
 async function readFilePayload(filePath: string): Promise<FileTab> {
   const stat = await fs.stat(filePath);
   if (!stat.isFile()) {
@@ -844,6 +900,19 @@ ipcMain.handle("workspace:index-files", async (_event, rootPath: string) => {
   }
 
   return indexWorkspaceFiles(rootPath);
+});
+
+ipcMain.handle("workspace:search-files", async (_event, rootPath: string, query: string, limit?: number) => {
+  if (typeof rootPath !== "string" || !rootPath) {
+    throw new Error("Workspace root path is required.");
+  }
+
+  const stat = await fs.stat(rootPath);
+  if (!stat.isDirectory()) {
+    throw new Error("Workspace root path is invalid.");
+  }
+
+  return searchWorkspaceFiles(rootPath, query, limit);
 });
 
 ipcMain.handle("viewer:read", async (_event, filePath: string) => {

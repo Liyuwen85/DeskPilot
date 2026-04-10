@@ -119,6 +119,11 @@ export interface WorkspaceIndexEntry {
   path: string;
 }
 
+export interface WorkspaceSearchEntry {
+  name: string;
+  path: string;
+}
+
 export interface DesktopApi {
   pickDirectory: () => Promise<WorkspacePayload | null>;
   openFileDialog: () => Promise<WorkspacePayload | null>;
@@ -130,6 +135,7 @@ export interface DesktopApi {
   confirmCloseWindow: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   openWorkspacePath: (targetPath: string) => Promise<WorkspacePayload>;
   indexWorkspaceFiles: (rootPath: string) => Promise<WorkspaceIndexEntry[]>;
+  searchWorkspaceFiles: (rootPath: string, query: string, limit?: number) => Promise<WorkspaceSearchEntry[]>;
   readDirectory: (directoryPath: string) => Promise<TreeNode[]>;
   readFile: (filePath: string) => Promise<FileTab>;
   getFileStats: (filePath: string) => Promise<FileStatsResult>;

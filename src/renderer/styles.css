@@ -435,6 +435,24 @@ input {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.command-result--active {
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  box-shadow: inset 2px 0 0 #3b82f6;
+}
+
+.command-result--active .command-result__label {
+  font-weight: 600;
+}
+
+.command-result--active .command-result__desc {
+  color: #cbd5e1;
+}
+
+.command-result--active .command-result__badge {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
 .command-result__main {
   min-width: 0;
   display: flex;
