@@ -72,6 +72,8 @@ interface FileMenuProps {
     homepageUrl: string;
   };
   showFileMenu?: boolean;
+  showViewMenu?: boolean;
+  showHelpMenu?: boolean;
 }
 
 type MenuKey = "file" | "markdown" | "format" | "view" | "help";
@@ -99,7 +101,9 @@ export function FileMenu({
   formatActions,
   viewActions,
   helpActions,
-  showFileMenu = true
+  showFileMenu = true,
+  showViewMenu = true,
+  showHelpMenu = true
 }: FileMenuProps) {
   const [openMenu, setOpenMenu] = React.useState<MenuKey | null>(null);
   const [recentOpen, setRecentOpen] = React.useState(false);
@@ -111,10 +115,10 @@ export function FileMenu({
       { key: "file" as const, enabled: showFileMenu },
       { key: "markdown" as const, enabled: markdownEnabled },
       { key: "format" as const, enabled: markdownEnabled },
-      { key: "view" as const, enabled: true },
-      { key: "help" as const, enabled: true }
+      { key: "view" as const, enabled: showViewMenu },
+      { key: "help" as const, enabled: showHelpMenu }
     ],
-    [markdownEnabled, showFileMenu]
+    [markdownEnabled, showFileMenu, showViewMenu, showHelpMenu]
   );
 
   const closeAll = React.useCallback(() => {
@@ -578,6 +582,7 @@ export function FileMenu({
         ) : null}
       </div>
 
+      {showViewMenu ? (
       <div className="menu-dropdown" data-menu="view">
         <button
           type="button"
@@ -652,7 +657,9 @@ export function FileMenu({
             </button>
           </div>
         ) : null}
-        </div>
+      </div>
+      ) : null}
+        {showHelpMenu ? (
         <div className="menu-dropdown" data-menu="help">
           <button
             type="button"
@@ -708,6 +715,7 @@ export function FileMenu({
             </div>
           ) : null}
         </div>
+        ) : null}
       </nav>
 
       {aboutOpen ? (

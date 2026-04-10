@@ -572,6 +572,8 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
           </div>
           <FileMenu
             showFileMenu={false}
+            showViewMenu={false}
+            showHelpMenu={false}
             recentItems={[]}
             onNewTab={() => {}}
             onNewWindow={() => {}}

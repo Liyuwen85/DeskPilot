@@ -1,10 +1,11 @@
 # DeskPilot
 
-DeskPilot is a simple and lightweight Markdown editor.
+DeskPilot is a simple and lightweight Markdown editor, with support for previewing Jupyter Notebooks, PDFs, media, and other text file types.
 
 ## Screenshot
 
 ![DeskPilot main window](./screenshot/main_window.png)
+![DeskPilot notebook preview window](./screenshot/notebook_preview.png)
 
 ## Todo
 
