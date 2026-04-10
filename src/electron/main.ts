@@ -1146,6 +1146,45 @@ ipcMain.on("window:maximize-toggle", (event) => {
   }
 });
 
+ipcMain.handle("window:always-on-top-toggle", (event) => {
+  const currentWindow = getWindowFromEvent(event);
+  if (!currentWindow) {
+    return { alwaysOnTop: false };
+  }
+
+  const nextValue = !currentWindow.isAlwaysOnTop();
+  currentWindow.setAlwaysOnTop(nextValue);
+  return { alwaysOnTop: currentWindow.isAlwaysOnTop() };
+});
+
+ipcMain.handle("window:is-always-on-top", (event) => {
+  return getWindowFromEvent(event)?.isAlwaysOnTop() ?? false;
+});
+
+ipcMain.handle("window:zoom-in", (event) => {
+  const currentWindow = getWindowFromEvent(event);
+  if (!currentWindow) {
+    return { zoomFactor: 1 };
+  }
+
+  const webContents = currentWindow.webContents;
+  const nextFactor = Math.min(3, Number((webContents.getZoomFactor() + 0.1).toFixed(2)));
+  webContents.setZoomFactor(nextFactor);
+  return { zoomFactor: nextFactor };
+});
+
+ipcMain.handle("window:zoom-out", (event) => {
+  const currentWindow = getWindowFromEvent(event);
+  if (!currentWindow) {
+    return { zoomFactor: 1 };
+  }
+
+  const webContents = currentWindow.webContents;
+  const nextFactor = Math.max(0.5, Number((webContents.getZoomFactor() - 0.1).toFixed(2)));
+  webContents.setZoomFactor(nextFactor);
+  return { zoomFactor: nextFactor };
+});
+
 ipcMain.on("window:close", (event) => {
   getWindowFromSender(event.sender)?.close();
 });

@@ -10,6 +10,11 @@ import type { TiptapCommandApi, TiptapOutlineApi, TiptapOutlineItem } from "./co
 import { useToast } from "./use-toast";
 import { isMarkdownTabDirty as computeMarkdownTabDirty } from "./close-guards";
 
+const REPOSITORY_URL = "https://github.com/Liyuwen85/DeskPilot";
+const GETTING_STARTED_URL = `${REPOSITORY_URL}/blob/main/README.md`;
+const MARKDOWN_HANDBOOK_URL = `${REPOSITORY_URL}/blob/main/docs/markdown-handbook.zh-CN.md`;
+const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`;
+
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : "";
 }
@@ -89,6 +94,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outlineItems, setOutlineItems] = React.useState<TiptapOutlineItem[]>([]);
   const [isMaximized, setIsMaximized] = React.useState(false);
+  const [isAlwaysOnTop, setIsAlwaysOnTop] = React.useState(false);
   const [loadError, setLoadError] = React.useState("");
   const commandApiRef = React.useRef<TiptapCommandApi | null>(null);
   const outlineApiRef = React.useRef<TiptapOutlineApi | null>(null);
@@ -118,6 +124,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
 
   React.useEffect(() => {
     void window.desktopApi.isWindowMaximized().then(setIsMaximized);
+    void window.desktopApi.isWindowAlwaysOnTop().then(setIsAlwaysOnTop);
   }, []);
 
   React.useEffect(() => {
@@ -595,6 +602,14 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
               onBlockMath: () => runMarkdownCommand((api) => api.insertBlockMath()),
               onImage: () => runMarkdownCommand((api) => api.insertImageFromFile())
             } : undefined}
+            helpActions={{
+              onOpenGettingStarted: () => window.desktopApi.openExternalUrl(GETTING_STARTED_URL),
+              onOpenMarkdownHandbook: () => window.desktopApi.openExternalUrl(MARKDOWN_HANDBOOK_URL),
+              onOpenLicense: () => window.desktopApi.openExternalUrl(LICENSE_URL),
+              version: "v0.0.2",
+              contactEmail: "doveyh@foxmail.com",
+              homepageUrl: REPOSITORY_URL
+            }}
             viewActions={{
               sourceModeEnabled: tab?.kind === "markdown",
               sourceModeActive: activeMarkdownSourceMode,
@@ -603,7 +618,17 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
               showSidebarActive: false,
               showOutlineEnabled: canToggleOutline,
               showOutlineActive: showOutlinePane,
-              onToggleOutline: () => setOutlineOpen((previous) => !previous)
+              onToggleOutline: () => setOutlineOpen((previous) => !previous),
+              openInNewWindowEnabled: false,
+              onMinimizeWindow: () => window.desktopApi.minimizeWindow(),
+              alwaysOnTopEnabled: true,
+              alwaysOnTopActive: isAlwaysOnTop,
+              onToggleAlwaysOnTop: async () => {
+                const result = await window.desktopApi.toggleAlwaysOnTop();
+                setIsAlwaysOnTop(result.alwaysOnTop);
+              },
+              onZoomInWindow: () => window.desktopApi.zoomInWindow(),
+              onZoomOutWindow: () => window.desktopApi.zoomOutWindow()
             }}
           />
         </div>

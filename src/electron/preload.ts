@@ -61,6 +61,10 @@ contextBridge.exposeInMainWorld("desktopApi", {
   quitApp: () => ipcRenderer.send("app:quit"),
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
   toggleMaximizeWindow: () => ipcRenderer.send("window:maximize-toggle"),
+  toggleAlwaysOnTop: () => ipcRenderer.invoke("window:always-on-top-toggle"),
+  isWindowAlwaysOnTop: () => ipcRenderer.invoke("window:is-always-on-top"),
+  zoomInWindow: () => ipcRenderer.invoke("window:zoom-in"),
+  zoomOutWindow: () => ipcRenderer.invoke("window:zoom-out"),
   closeWindow: () => ipcRenderer.send("window:close"),
   isWindowMaximized: () => ipcRenderer.invoke("window:is-maximized")
 });

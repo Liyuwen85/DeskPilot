@@ -1,4 +1,5 @@
 import React from "react";
+import deskpilotLogoUrl from "../../../screenshot/deskpilot_logo.png";
 
 interface RecentItemLike {
   kind: string;
@@ -38,6 +39,14 @@ interface ViewMenuActions {
   showOutlineEnabled?: boolean;
   showOutlineActive?: boolean;
   onToggleOutline?: () => void | Promise<void>;
+  openInNewWindowEnabled?: boolean;
+  onOpenInNewWindow?: () => void | Promise<void>;
+  onMinimizeWindow?: () => void | Promise<void>;
+  alwaysOnTopEnabled?: boolean;
+  alwaysOnTopActive?: boolean;
+  onToggleAlwaysOnTop?: () => void | Promise<void>;
+  onZoomInWindow?: () => void | Promise<void>;
+  onZoomOutWindow?: () => void | Promise<void>;
 }
 
 interface FileMenuProps {
@@ -54,10 +63,26 @@ interface FileMenuProps {
   markdownActions?: MarkdownMenuActions;
   formatActions?: FormatMenuActions;
   viewActions?: ViewMenuActions;
+  helpActions?: {
+    onOpenGettingStarted?: () => void | Promise<void>;
+    onOpenMarkdownHandbook?: () => void | Promise<void>;
+    onOpenLicense?: () => void | Promise<void>;
+    version: string;
+    contactEmail: string;
+    homepageUrl: string;
+  };
   showFileMenu?: boolean;
 }
 
-type MenuKey = "file" | "markdown" | "format" | "view";
+type MenuKey = "file" | "markdown" | "format" | "view" | "help";
+
+function MenuCheck({ active }: { active?: boolean }) {
+  return <span className={`menu-check ${active ? "menu-check--active" : ""}`}>{"\u2713"}</span>;
+}
+
+function MenuCheckSpacer() {
+  return <span className="menu-check menu-check--placeholder" aria-hidden="true">{"\u2713"}</span>;
+}
 
 export function FileMenu({
   recentItems,
@@ -73,10 +98,12 @@ export function FileMenu({
   markdownActions,
   formatActions,
   viewActions,
+  helpActions,
   showFileMenu = true
 }: FileMenuProps) {
   const [openMenu, setOpenMenu] = React.useState<MenuKey | null>(null);
   const [recentOpen, setRecentOpen] = React.useState(false);
+  const [aboutOpen, setAboutOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
 
   const topLevelMenus = React.useMemo(
@@ -84,7 +111,8 @@ export function FileMenu({
       { key: "file" as const, enabled: showFileMenu },
       { key: "markdown" as const, enabled: markdownEnabled },
       { key: "format" as const, enabled: markdownEnabled },
-      { key: "view" as const, enabled: true }
+      { key: "view" as const, enabled: true },
+      { key: "help" as const, enabled: true }
     ],
     [markdownEnabled, showFileMenu]
   );
@@ -99,9 +127,11 @@ export function FileMenu({
   }, []);
 
   const handleAction = React.useCallback(
-    async (action: () => void | Promise<void>) => {
+    async (action?: () => void | Promise<void>) => {
       closeAll();
-      await action();
+      if (action) {
+        await action();
+      }
     },
     [closeAll]
   );
@@ -211,10 +241,6 @@ export function FileMenu({
     }
 
     function handleMenuKeyDown(event: KeyboardEvent) {
-      if (!openMenu) {
-        return;
-      }
-
       const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const visibleItems = getVisibleMenuItems(openMenu);
       const currentIndex = activeElement ? visibleItems.indexOf(activeElement) : -1;
@@ -236,7 +262,9 @@ export function FileMenu({
         }
 
         event.preventDefault();
-        const nextIndex = currentIndex >= 0 ? (currentIndex - 1 + visibleItems.length) % visibleItems.length : visibleItems.length - 1;
+        const nextIndex = currentIndex >= 0
+          ? (currentIndex - 1 + visibleItems.length) % visibleItems.length
+          : visibleItems.length - 1;
         visibleItems[nextIndex]?.focus();
         return;
       }
@@ -314,137 +342,96 @@ export function FileMenu({
   }, [focusMenuTarget, getVisibleMenuItems, openMenu, recentOpen, topLevelMenus]);
 
   return (
-    <nav className="titlebar__menu" aria-label="App menu" ref={menuRef}>
-      {showFileMenu ? (
-      <div className="menu-dropdown" data-menu="file">
-        <button
-          type="button"
-          className={`menu-btn ${openMenu === "file" ? "menu-btn--active" : ""}`}
-          onMouseDown={preventFocusSteal}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              openMenuWithKeyboard("file");
-            }
-          }}
-          onClick={() => {
-            setOpenMenu((current) => (current === "file" ? null : "file"));
-            setRecentOpen(false);
-          }}
-        >
-          文件
-        </button>
-        {openMenu === "file" ? (
-          <div className="menu-dropdown__panel">
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(onNewTab)}
-            >
-              <span className="menu-dropdown__label">新建 Markdown</span>
-              <span className="menu-dropdown__hint">Ctrl+T</span>
-            </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(onNewWindow)}
-            >
-              <span className="menu-dropdown__label">新建窗口</span>
-              <span className="menu-dropdown__hint">Ctrl+Shift+N</span>
-            </button>
-            <div className="menu-dropdown__separator" />
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(onOpenFile)}
-            >
-              <span className="menu-dropdown__label">打开文件</span>
-              <span className="menu-dropdown__hint">Ctrl+O</span>
-            </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(onOpenFolder)}
-            >
-              <span className="menu-dropdown__label">打开文件夹</span>
-              <span className="menu-dropdown__hint">Ctrl+K Ctrl+O</span>
-            </button>
-            <div
-              className="menu-dropdown__item menu-dropdown__item--submenu"
-              role="button"
-              tabIndex={-1}
-              data-menu-nav-item="true"
-              data-submenu-trigger="recent"
-              onMouseDown={preventFocusSteal}
-              onMouseEnter={() => setRecentOpen(true)}
-              onMouseLeave={() => setRecentOpen(false)}
-            >
-              <span className="menu-dropdown__label">打开最近</span>
-              <span className="menu-dropdown__hint">›</span>
-              {recentOpen ? (
-                <div className="menu-dropdown__submenu">
-                  {recentItems.length > 0 ? (
-                    recentItems.map((item) => (
-                      <button
-                        key={`${item.kind}:${item.path}`}
-                        type="button"
-                        className="menu-dropdown__item menu-dropdown__item--recent"
-                        data-menu-nav-item="true"
-                        onMouseDown={preventFocusSteal}
-                        onClick={() => void handleAction(() => onOpenRecent(item))}
-                      >
-                        <span className="menu-dropdown__label">{item.label}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="menu-dropdown__empty">暂无最近记录</div>
-                  )}
-                </div>
-              ) : null}
+    <>
+      <nav className="titlebar__menu" aria-label="App menu" ref={menuRef}>
+        {showFileMenu ? (
+        <div className="menu-dropdown" data-menu="file">
+          <button
+            type="button"
+            className={`menu-btn ${openMenu === "file" ? "menu-btn--active" : ""}`}
+            onMouseDown={preventFocusSteal}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openMenuWithKeyboard("file");
+              }
+            }}
+            onClick={() => {
+              setOpenMenu((current) => (current === "file" ? null : "file"));
+              setRecentOpen(false);
+            }}
+          >
+            {"\u6587\u4ef6"}
+          </button>
+          {openMenu === "file" ? (
+            <div className="menu-dropdown__panel">
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(onNewTab)}>
+                <span className="menu-dropdown__label">{"\u65b0\u5efa Markdown"}</span>
+                <span className="menu-dropdown__hint">Ctrl+T</span>
+              </button>
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(onNewWindow)}>
+                <span className="menu-dropdown__label">{"\u65b0\u5efa\u7a97\u53e3"}</span>
+                <span className="menu-dropdown__hint">Ctrl+Shift+N</span>
+              </button>
+              <div className="menu-dropdown__separator" />
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(onOpenFile)}>
+                <span className="menu-dropdown__label">{"\u6253\u5f00\u6587\u4ef6"}</span>
+                <span className="menu-dropdown__hint">Ctrl+O</span>
+              </button>
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(onOpenFolder)}>
+                <span className="menu-dropdown__label">{"\u6253\u5f00\u6587\u4ef6\u5939"}</span>
+                <span className="menu-dropdown__hint">Ctrl+K Ctrl+O</span>
+              </button>
+              <div
+                className="menu-dropdown__item menu-dropdown__item--submenu"
+                role="button"
+                tabIndex={-1}
+                data-menu-nav-item="true"
+                data-submenu-trigger="recent"
+                onMouseDown={preventFocusSteal}
+                onMouseEnter={() => setRecentOpen(true)}
+                onMouseLeave={() => setRecentOpen(false)}
+              >
+                <span className="menu-dropdown__label">{"\u6253\u5f00\u6700\u8fd1"}</span>
+                <span className="menu-dropdown__hint">{"\u2026"}</span>
+                {recentOpen ? (
+                  <div className="menu-dropdown__submenu">
+                    {recentItems.length > 0 ? (
+                      recentItems.map((item) => (
+                        <button
+                          key={`${item.kind}:${item.path}`}
+                          type="button"
+                          className="menu-dropdown__item menu-dropdown__item--recent"
+                          data-menu-nav-item="true"
+                          onMouseDown={preventFocusSteal}
+                          onClick={() => void handleAction(() => onOpenRecent(item))}
+                        >
+                          <span className="menu-dropdown__label">{item.label}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="menu-dropdown__empty">{"\u6682\u65e0\u6700\u8fd1\u8bb0\u5f55"}</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              <div className="menu-dropdown__separator" />
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(onSave)}>
+                <span className="menu-dropdown__label">{"\u4fdd\u5b58"}</span>
+                <span className="menu-dropdown__hint">Ctrl+S</span>
+              </button>
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(onSaveAs)}>
+                <span className="menu-dropdown__label">{"\u53e6\u5b58\u4e3a"}</span>
+                <span className="menu-dropdown__hint">Ctrl+Shift+S</span>
+              </button>
+              <div className="menu-dropdown__separator" />
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(onQuit)}>
+                <span className="menu-dropdown__label">{"\u9000\u51fa"}</span>
+                <span className="menu-dropdown__hint">Alt+F4</span>
+              </button>
             </div>
-            <div className="menu-dropdown__separator" />
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(onSave)}
-            >
-              <span className="menu-dropdown__label">保存</span>
-              <span className="menu-dropdown__hint">Ctrl+S</span>
-            </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(onSaveAs)}
-            >
-              <span className="menu-dropdown__label">另存为</span>
-              <span className="menu-dropdown__hint">Ctrl+Shift+S</span>
-            </button>
-            <div className="menu-dropdown__separator" />
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(onQuit)}
-            >
-              <span className="menu-dropdown__label">退出</span>
-              <span className="menu-dropdown__hint">Alt+F4</span>
-            </button>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="menu-dropdown" data-menu="markdown">
@@ -476,62 +463,31 @@ export function FileMenu({
         </button>
         {openMenu === "markdown" && markdownEnabled && markdownActions ? (
           <div className="menu-dropdown__panel">
-            <div className="menu-dropdown__empty">标题</div>
+            <div className="menu-dropdown__empty">{"\u6807\u9898"}</div>
             {[1, 2, 3, 4, 5].map((level) => (
-              <button
-                key={level}
-                type="button"
-                className="menu-dropdown__item"
-                data-menu-nav-item="true"
-                onMouseDown={preventFocusSteal}
-                onClick={() => void handleAction(() => markdownActions.onHeading(level))}
-              >
+              <button key={level} type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => markdownActions.onHeading(level))}>
                 <span className="menu-dropdown__label">{`H${level}`}</span>
                 <span className="menu-dropdown__hint">{`Ctrl+Alt+${level}`}</span>
               </button>
             ))}
             <div className="menu-dropdown__separator" />
-            <div className="menu-dropdown__empty">插入</div>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(markdownActions.onHorizontalRule)}
-            >
-              <span className="menu-dropdown__label">分割线</span>
+            <div className="menu-dropdown__empty">{"\u63d2\u5165"}</div>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(markdownActions.onHorizontalRule)}>
+              <span className="menu-dropdown__label">{"\u5206\u5272\u7ebf"}</span>
               <span className="menu-dropdown__hint">Ctrl+Alt+-</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(markdownActions.onImage)}
-            >
-              <span className="menu-dropdown__label">图片</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(markdownActions.onImage)}>
+              <span className="menu-dropdown__label">{"\u56fe\u7247"}</span>
               <span className="menu-dropdown__hint">Ctrl+Alt+I</span>
             </button>
             <div className="menu-dropdown__separator" />
-            <div className="menu-dropdown__empty">数学公式</div>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(markdownActions.onInlineMath)}
-            >
-              <span className="menu-dropdown__label">行内公式</span>
+            <div className="menu-dropdown__empty">{"\u6570\u5b66\u516c\u5f0f"}</div>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(markdownActions.onInlineMath)}>
+              <span className="menu-dropdown__label">{"\u884c\u5185\u516c\u5f0f"}</span>
               <span className="menu-dropdown__hint">Ctrl+Alt+M</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(markdownActions.onBlockMath)}
-            >
-              <span className="menu-dropdown__label">块级公式</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(markdownActions.onBlockMath)}>
+              <span className="menu-dropdown__label">{"\u5757\u7ea7\u516c\u5f0f"}</span>
               <span className="menu-dropdown__hint">Ctrl+Alt+Shift+M</span>
             </button>
           </div>
@@ -563,125 +519,59 @@ export function FileMenu({
             setRecentOpen(false);
           }}
         >
-          格式
+          {"\u683c\u5f0f"}
         </button>
         {openMenu === "format" && markdownEnabled && formatActions ? (
           <div className="menu-dropdown__panel">
-            <div className="menu-dropdown__empty">文本样式</div>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onBold)}
-            >
-              <span className="menu-dropdown__label">加粗</span>
+            <div className="menu-dropdown__empty">{"\u6587\u672c\u6837\u5f0f"}</div>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onBold)}>
+              <span className="menu-dropdown__label">{"\u52a0\u7c97"}</span>
               <span className="menu-dropdown__hint">Ctrl+B</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onItalic)}
-            >
-              <span className="menu-dropdown__label">斜体</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onItalic)}>
+              <span className="menu-dropdown__label">{"\u659c\u4f53"}</span>
               <span className="menu-dropdown__hint">Ctrl+I</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onUnderline)}
-            >
-              <span className="menu-dropdown__label">下划线</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onUnderline)}>
+              <span className="menu-dropdown__label">{"\u4e0b\u5212\u7ebf"}</span>
               <span className="menu-dropdown__hint">Ctrl+U</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onStrike)}
-            >
-              <span className="menu-dropdown__label">删除线</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onStrike)}>
+              <span className="menu-dropdown__label">{"\u5220\u9664\u7ebf"}</span>
               <span className="menu-dropdown__hint">Ctrl+Shift+S</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onInlineCode)}
-            >
-              <span className="menu-dropdown__label">行内代码</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onInlineCode)}>
+              <span className="menu-dropdown__label">{"\u884c\u5185\u4ee3\u7801"}</span>
               <span className="menu-dropdown__hint">Ctrl+E</span>
             </button>
             <div className="menu-dropdown__separator" />
-            <div className="menu-dropdown__empty">列表</div>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onBulletList)}
-            >
-              <span className="menu-dropdown__label">无序列表</span>
+            <div className="menu-dropdown__empty">{"\u5217\u8868"}</div>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onBulletList)}>
+              <span className="menu-dropdown__label">{"\u65e0\u5e8f\u5217\u8868"}</span>
               <span className="menu-dropdown__hint">Ctrl+Shift+8</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onOrderedList)}
-            >
-              <span className="menu-dropdown__label">有序列表</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onOrderedList)}>
+              <span className="menu-dropdown__label">{"\u6709\u5e8f\u5217\u8868"}</span>
               <span className="menu-dropdown__hint">Ctrl+Shift+7</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onTaskList)}
-            >
-              <span className="menu-dropdown__label">任务列表</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onTaskList)}>
+              <span className="menu-dropdown__label">{"\u4efb\u52a1\u5217\u8868"}</span>
               <span className="menu-dropdown__hint">Ctrl+Shift+9</span>
             </button>
             <div className="menu-dropdown__separator" />
-            <div className="menu-dropdown__empty">块级</div>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onBlockquote)}
-            >
-              <span className="menu-dropdown__label">引用</span>
+            <div className="menu-dropdown__empty">{"\u5757\u7ea7"}</div>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onBlockquote)}>
+              <span className="menu-dropdown__label">{"\u5f15\u7528"}</span>
               <span className="menu-dropdown__hint">Ctrl+Shift+B</span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onCodeBlock)}
-            >
-              <span className="menu-dropdown__label">代码块</span>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onCodeBlock)}>
+              <span className="menu-dropdown__label">{"\u4ee3\u7801\u5757"}</span>
               <span className="menu-dropdown__hint">Ctrl+Alt+C</span>
             </button>
             <div className="menu-dropdown__separator" />
-            <div className="menu-dropdown__empty">清理</div>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(formatActions.onClearFormatting)}
-            >
-              <span className="menu-dropdown__label">清除格式</span>
+            <div className="menu-dropdown__empty">{"\u6e05\u7406"}</div>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(formatActions.onClearFormatting)}>
+              <span className="menu-dropdown__label">{"\u6e05\u9664\u683c\u5f0f"}</span>
               <span className="menu-dropdown__hint">Ctrl+\\</span>
             </button>
           </div>
@@ -704,53 +594,153 @@ export function FileMenu({
             setRecentOpen(false);
           }}
         >
-          视图
+          {"\u89c6\u56fe"}
         </button>
         {openMenu === "view" ? (
           <div className="menu-dropdown__panel">
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              disabled={!viewActions?.sourceModeEnabled}
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(() => viewActions?.onToggleSourceMode?.())}
-            >
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.sourceModeEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleSourceMode?.())}>
               <span className="menu-dropdown__label">
-                <span className={`menu-check ${viewActions?.sourceModeActive ? "menu-check--active" : ""}`}>✓</span>
-                源码模式
+                <MenuCheck active={viewActions?.sourceModeActive} />
+                {"\u6e90\u7801\u6a21\u5f0f"}
               </span>
             </button>
             <div className="menu-dropdown__separator" />
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              disabled={!viewActions?.showSidebarEnabled}
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(() => viewActions?.onToggleSidebar?.())}
-            >
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.showSidebarEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleSidebar?.())}>
               <span className="menu-dropdown__label">
-                <span className={`menu-check ${viewActions?.showSidebarActive ? "menu-check--active" : ""}`}>✓</span>
-                显示导航栏
+                <MenuCheck active={viewActions?.showSidebarActive} />
+                {"\u663e\u793a\u5bfc\u822a\u680f"}
               </span>
             </button>
-            <button
-              type="button"
-              className="menu-dropdown__item"
-              data-menu-nav-item="true"
-              disabled={!viewActions?.showOutlineEnabled}
-              onMouseDown={preventFocusSteal}
-              onClick={() => void handleAction(() => viewActions?.onToggleOutline?.())}
-            >
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.showOutlineEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleOutline?.())}>
               <span className="menu-dropdown__label">
-                <span className={`menu-check ${viewActions?.showOutlineActive ? "menu-check--active" : ""}`}>✓</span>
-                显示大纲
+                <MenuCheck active={viewActions?.showOutlineActive} />
+                {"\u663e\u793a\u5927\u7eb2"}
+              </span>
+            </button>
+            <div className="menu-dropdown__separator" />
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.openInNewWindowEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onOpenInNewWindow?.())}>
+              <span className="menu-dropdown__label">
+                <MenuCheckSpacer />
+                {"\u65b0\u7a97\u53e3\u6253\u5f00"}
+              </span>
+            </button>
+            <div className="menu-dropdown__separator" />
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onMinimizeWindow?.())}>
+              <span className="menu-dropdown__label">
+                <MenuCheckSpacer />
+                {"\u6700\u5c0f\u5316"}
+              </span>
+            </button>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.alwaysOnTopEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleAlwaysOnTop?.())}>
+              <span className="menu-dropdown__label">
+                <MenuCheck active={viewActions?.alwaysOnTopActive} />
+                {"\u9876\u90e8\u663e\u793a"}
+              </span>
+            </button>
+            <div className="menu-dropdown__separator" />
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onZoomInWindow?.())}>
+              <span className="menu-dropdown__label">
+                <MenuCheckSpacer />
+                {"\u653e\u5927"}
+              </span>
+            </button>
+            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onZoomOutWindow?.())}>
+              <span className="menu-dropdown__label">
+                <MenuCheckSpacer />
+                {"\u7f29\u5c0f"}
               </span>
             </button>
           </div>
         ) : null}
-      </div>
-    </nav>
+        </div>
+        <div className="menu-dropdown" data-menu="help">
+          <button
+            type="button"
+            className={`menu-btn ${openMenu === "help" ? "menu-btn--active" : ""}`}
+            onMouseDown={preventFocusSteal}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openMenuWithKeyboard("help");
+              }
+            }}
+            onClick={() => {
+              setOpenMenu((current) => (current === "help" ? null : "help"));
+              setRecentOpen(false);
+            }}
+          >
+            {"\u5e2e\u52a9"}
+          </button>
+          {openMenu === "help" ? (
+            <div className="menu-dropdown__panel">
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(helpActions?.onOpenGettingStarted)}>
+                <span className="menu-dropdown__label">
+                  <MenuCheckSpacer />
+                  {"\u5f00\u59cb"}
+                </span>
+              </button>
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(helpActions?.onOpenMarkdownHandbook)}>
+                <span className="menu-dropdown__label">
+                  <MenuCheckSpacer />
+                  {"Markdown\u624b\u518c"}
+                </span>
+              </button>
+              <div className="menu-dropdown__separator" />
+              <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(helpActions?.onOpenLicense)}>
+                <span className="menu-dropdown__label">
+                  <MenuCheckSpacer />
+                  LICENSE
+                </span>
+              </button>
+              <div className="menu-dropdown__separator" />
+              <button
+                type="button"
+                className="menu-dropdown__item"
+                data-menu-nav-item="true"
+                onMouseDown={preventFocusSteal}
+                onClick={() => void handleAction(() => setAboutOpen(true))}
+              >
+                <span className="menu-dropdown__label">
+                  <MenuCheckSpacer />
+                  {"\u5173\u4e8e"}
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </nav>
+
+      {aboutOpen ? (
+        <div className="about-dialog" role="dialog" aria-modal="true" aria-label="关于 DeskPilot">
+          <div className="about-dialog__backdrop" onClick={() => setAboutOpen(false)} />
+          <div className="about-dialog__panel">
+            <button type="button" className="about-dialog__close" onClick={() => setAboutOpen(false)}>×</button>
+            <img className="about-dialog__logo" src={deskpilotLogoUrl} alt="DeskPilot logo" />
+            <div className="about-dialog__title">DeskPilot</div>
+            <div className="about-dialog__version">{helpActions?.version || "v0.0.2"}</div>
+            <div className="about-dialog__meta">
+              <span>{"\u90ae\u7bb1"}</span>
+              <button
+                type="button"
+                className="about-dialog__link"
+                onClick={() => void window.desktopApi.openExternalUrl(`mailto:${helpActions?.contactEmail || "doveyh@foxmail.com"}`)}
+              >
+                {helpActions?.contactEmail || "doveyh@foxmail.com"}
+              </button>
+            </div>
+            <div className="about-dialog__meta">
+              <span>GitHub</span>
+              <button
+                type="button"
+                className="about-dialog__link"
+                onClick={() => void window.desktopApi.openExternalUrl(helpActions?.homepageUrl || "https://github.com/Liyuwen85/DeskPilot")}
+              >
+                {helpActions?.homepageUrl || "https://github.com/Liyuwen85/DeskPilot"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

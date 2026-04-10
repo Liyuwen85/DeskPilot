@@ -20,6 +20,10 @@ import "./styles.css";
 const rendererSearchParams = new URLSearchParams(window.location.search);
 const rendererMode = rendererSearchParams.get("mode");
 const documentTargetPath = rendererSearchParams.get("targetPath") || "";
+const REPOSITORY_URL = "https://github.com/Liyuwen85/DeskPilot";
+const GETTING_STARTED_URL = `${REPOSITORY_URL}/blob/main/README.md`;
+const MARKDOWN_HANDBOOK_URL = `${REPOSITORY_URL}/blob/main/docs/markdown-handbook.zh-CN.md`;
+const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`;
 
 console.log("[renderer:boot]", {
   href: window.location.href,
@@ -447,6 +451,7 @@ function App() {
   const [markdownDraftMap, setMarkdownDraftMap] = React.useState({});
   const [activeTabPath, setActiveTabPath] = React.useState(null);
   const [isMaximized, setIsMaximized] = React.useState(false);
+  const [isAlwaysOnTop, setIsAlwaysOnTop] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [activeView, setActiveView] = React.useState("explorer");
@@ -585,6 +590,7 @@ function App() {
 
   React.useEffect(() => {
     window.desktopApi.isWindowMaximized().then(setIsMaximized);
+    window.desktopApi.isWindowAlwaysOnTop().then(setIsAlwaysOnTop).catch(() => {});
   }, []);
 
   React.useEffect(() => {
@@ -2356,7 +2362,6 @@ function App() {
 
     return (
       <>
-        <div className="sidebar__section-label">{UI_TEXT.sidebar.workspaceTitle}</div>
         <TreeView
           tree={tree}
           expandedPaths={expandedPaths}
@@ -2454,6 +2459,14 @@ function App() {
               onBlockMath: () => runActiveMarkdownCommand((api) => api.insertBlockMath()),
               onImage: () => runActiveMarkdownCommand((api) => api.insertImageFromFile())
             } : undefined}
+            helpActions={{
+              onOpenGettingStarted: () => window.desktopApi.openExternalUrl(GETTING_STARTED_URL),
+              onOpenMarkdownHandbook: () => window.desktopApi.openExternalUrl(MARKDOWN_HANDBOOK_URL),
+              onOpenLicense: () => window.desktopApi.openExternalUrl(LICENSE_URL),
+              version: "v0.0.2",
+              contactEmail: "doveyh@foxmail.com",
+              homepageUrl: REPOSITORY_URL
+            }}
             viewActions={{
               sourceModeEnabled: activeTab?.kind === "markdown",
               sourceModeActive: activeMarkdownSourceMode,
@@ -2463,7 +2476,18 @@ function App() {
               onToggleSidebar: () => setSidebarVisible((previous) => !previous),
               showOutlineEnabled: canToggleOutline,
               showOutlineActive: showOutlinePane,
-              onToggleOutline: () => setOutlineOpen((previous) => !previous)
+              onToggleOutline: () => setOutlineOpen((previous) => !previous),
+              openInNewWindowEnabled: Boolean(activeTab && !String(activeTab.path).startsWith("untitled:")),
+              onOpenInNewWindow: () => activeTab ? moveTabToDocumentWindow(activeTab.path) : undefined,
+              onMinimizeWindow: () => window.desktopApi.minimizeWindow(),
+              alwaysOnTopEnabled: true,
+              alwaysOnTopActive: isAlwaysOnTop,
+              onToggleAlwaysOnTop: async () => {
+                const result = await window.desktopApi.toggleAlwaysOnTop();
+                setIsAlwaysOnTop(result.alwaysOnTop);
+              },
+              onZoomInWindow: () => window.desktopApi.zoomInWindow(),
+              onZoomOutWindow: () => window.desktopApi.zoomOutWindow()
             }}
           />
         </div>

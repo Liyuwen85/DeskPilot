@@ -154,6 +154,10 @@ export interface DesktopApi {
   quitApp: () => void;
   minimizeWindow: () => void;
   toggleMaximizeWindow: () => void;
+  toggleAlwaysOnTop: () => Promise<{ alwaysOnTop: boolean }>;
+  isWindowAlwaysOnTop: () => Promise<boolean>;
+  zoomInWindow: () => Promise<{ zoomFactor: number }>;
+  zoomOutWindow: () => Promise<{ zoomFactor: number }>;
   closeWindow: () => void;
   isWindowMaximized: () => Promise<boolean>;
 }
