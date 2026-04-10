@@ -10,8 +10,8 @@ export const UI_TEXT = {
   search: {
     openedBadge: "已打开",
     fileBadge: "文件",
-    placeholder: "搜索",
-    inputPlaceholder: "搜索文件名或路径",
+    placeholder: "快速搜索",
+    inputPlaceholder: "快速查找文件名或路径",
     emptyResult: "没有匹配结果",
     emptyHint: "输入文件名或路径进行搜索",
     icon: "⌕"

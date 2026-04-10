@@ -115,13 +115,19 @@ export interface FileStatsResult {
 }
 
 export interface WorkspaceIndexEntry {
+  relativePath: string;
   name: string;
   path: string;
+  ext: string;
+  mtimeMs: number;
+  size: number;
 }
 
 export interface WorkspaceSearchEntry {
   name: string;
   path: string;
+  relativePath: string;
+  score?: number;
 }
 
 export interface DesktopApi {
@@ -134,8 +140,8 @@ export interface DesktopApi {
   confirmCloseTab: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   confirmCloseWindow: (payload: ConfirmClosePayload) => Promise<ConfirmCloseResult>;
   openWorkspacePath: (targetPath: string) => Promise<WorkspacePayload>;
-  indexWorkspaceFiles: (rootPath: string) => Promise<WorkspaceIndexEntry[]>;
   searchWorkspaceFiles: (rootPath: string, query: string, limit?: number) => Promise<WorkspaceSearchEntry[]>;
+  refreshWorkspaceIndex: (rootPath: string) => Promise<{ ok: boolean }>;
   readDirectory: (directoryPath: string) => Promise<TreeNode[]>;
   readFile: (filePath: string) => Promise<FileTab>;
   getFileStats: (filePath: string) => Promise<FileStatsResult>;

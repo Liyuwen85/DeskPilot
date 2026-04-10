@@ -544,11 +544,19 @@ function App() {
   const [selectedTreePath, setSelectedTreePath] = React.useState<string | null>(null);
   const [treeRenamingPath, setTreeRenamingPath] = React.useState<string | null>(null);
   const [treeRenamingValue, setTreeRenamingValue] = React.useState("");
+  const [pendingDeleteNode, setPendingDeleteNode] = React.useState<any | null>(null);
   const [draggingTabPath, setDraggingTabPath] = React.useState(null);
   const [dragOverTab, setDragOverTab] = React.useState(null);
   const [recentItems, setRecentItems] = React.useState(() => loadRecentItems());
   const [sidebarWidth, setSidebarWidth] = React.useState(() => loadSidebarWidth());
-  const [workspaceSearchResults, setWorkspaceSearchResults] = React.useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = React.useState(false);
+  const [lastCompletedSearchQuery, setLastCompletedSearchQuery] = React.useState("");
+  const [workspaceSearchResults, setWorkspaceSearchResults] = React.useState<Array<{
+    name: string;
+    path: string;
+    relativePath?: string;
+    score?: number;
+  }>>([]);
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outlineMap, setOutlineMap] = React.useState<Record<string, TiptapOutlineItem[]>>({});
   const [previewStatusMap, setPreviewStatusMap] = React.useState<Record<string, any>>({});
@@ -575,7 +583,17 @@ function App() {
   const commandApiMapRef = React.useRef(new Map<string, TiptapCommandApi>());
   const searchRequestIdRef = React.useRef(0);
   const { toast, showSuccess, showError } = useToast();
-  const deferredSearchQuery = React.useDeferredValue(searchQuery);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
+  const focusCommandSearchInput = React.useCallback(() => {
+    const input = searchInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.focus();
+    const valueLength = input.value.length;
+    input.setSelectionRange(valueLength, valueLength);
+  }, []);
 
   React.useEffect(() => {
     treeRef.current = tree;
@@ -691,45 +709,101 @@ function App() {
   }, [activeTabPath, markdownDraftMap, savedTextMap, tabTextMap, tabs]);
 
   React.useEffect(() => {
-    if (searchOpen) {
-      searchInputRef.current?.focus();
+    if (!searchOpen) {
       return;
     }
-  }, [searchOpen]);
+
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 140);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchOpen, searchQuery]);
+
+  React.useEffect(() => {
+    if (searchOpen) {
+      focusCommandSearchInput();
+      return;
+    }
+  }, [focusCommandSearchInput, searchOpen]);
 
   React.useEffect(() => {
     if (!searchOpen) {
-      searchRequestIdRef.current += 1;
-      setWorkspaceSearchResults([]);
       return;
     }
 
-    const query = deferredSearchQuery.trim();
+    const focusInput = () => {
+      focusCommandSearchInput();
+    };
+
+    const timeoutId = window.setTimeout(focusInput, 0);
+    const frameId = window.requestAnimationFrame(focusInput);
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [focusCommandSearchInput, searchOpen, tree]);
+
+  const refreshWorkspaceSearchResults = React.useCallback(async (queryValue?: string) => {
     const workspaceRootPath = String(rootPath || "").trim();
-    if (!workspaceRootPath || !query) {
-      setWorkspaceSearchResults([]);
-      return;
-    }
+    const nextQuery = String(queryValue ?? searchQuery).trim();
 
     const requestId = searchRequestIdRef.current + 1;
     searchRequestIdRef.current = requestId;
 
-    void window.desktopApi.searchWorkspaceFiles(workspaceRootPath, query, 8)
-      .then((results) => {
-        if (searchRequestIdRef.current !== requestId) {
-          return;
-        }
+    if (!searchOpen || !workspaceRootPath || !nextQuery) {
+      setSearchLoading(false);
+      return;
+    }
 
-        setWorkspaceSearchResults(Array.isArray(results) ? results : []);
-      })
-      .catch(() => {
-        if (searchRequestIdRef.current !== requestId) {
-          return;
-        }
+    if (nextQuery === lastCompletedSearchQuery) {
+      setSearchLoading(false);
+      return;
+    }
 
-        setWorkspaceSearchResults([]);
-      });
-  }, [deferredSearchQuery, rootPath, searchOpen]);
+    setSearchLoading(true);
+
+    try {
+      const results = await window.desktopApi.searchWorkspaceFiles(workspaceRootPath, nextQuery, 8);
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setWorkspaceSearchResults(Array.isArray(results) ? results : []);
+      setLastCompletedSearchQuery(nextQuery);
+    } catch {
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setWorkspaceSearchResults([]);
+      setLastCompletedSearchQuery(nextQuery);
+    } finally {
+      if (searchRequestIdRef.current === requestId) {
+        setSearchLoading(false);
+      }
+    }
+  }, [lastCompletedSearchQuery, rootPath, searchOpen, searchQuery]);
+
+  React.useEffect(() => {
+    if (!searchQuery.trim()) {
+      searchRequestIdRef.current += 1;
+      setSearchLoading(false);
+      setDebouncedSearchQuery("");
+      setLastCompletedSearchQuery("");
+      setWorkspaceSearchResults([]);
+      return;
+    }
+
+    if (!searchOpen) {
+      setSearchLoading(false);
+      return;
+    }
+
+    void refreshWorkspaceSearchResults(debouncedSearchQuery);
+  }, [debouncedSearchQuery, refreshWorkspaceSearchResults, searchOpen, searchQuery]);
 
   const getPersistedContentForTab = React.useCallback(async (tab) => {
     if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook") {
@@ -1306,6 +1380,18 @@ function App() {
     const result = await window.desktopApi.openWorkspacePath(targetPath);
     applyWorkspaceResult(result);
   }, [applyWorkspaceResult]);
+
+  const refreshCurrentWorkspace = React.useCallback(async () => {
+    const workspaceRootPath = String(rootPath || "").trim();
+    if (!workspaceRootPath) {
+      return;
+    }
+
+    await window.desktopApi.refreshWorkspaceIndex(workspaceRootPath);
+    const refreshed = await window.desktopApi.openWorkspacePath(workspaceRootPath);
+    applyWorkspaceResult(refreshed);
+    void refreshWorkspaceSearchResults();
+  }, [applyWorkspaceResult, refreshWorkspaceSearchResults, rootPath]);
 
   React.useEffect(() => {
     if (didRestoreWorkspaceRef.current) {
@@ -1984,9 +2070,9 @@ function App() {
   const openCommandSearch = React.useCallback(() => {
     setSearchOpen(true);
     window.requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
+      focusCommandSearchInput();
     });
-  }, []);
+  }, [focusCommandSearchInput]);
 
   React.useEffect(() => {
     function handleKeyDown(event) {
@@ -2032,7 +2118,7 @@ function App() {
 
   const handleSearchSelect = React.useCallback(async (filePath) => {
     setSearchOpen(false);
-    setSearchQuery("");
+    searchInputRef.current?.blur();
     await openFile(filePath);
   }, [openFile]);
 
@@ -2115,11 +2201,12 @@ function App() {
   }, [activeTab, getPersistedContentForTab, showError, showSuccess]);
 
   const searchResults = React.useMemo(() => {
-    if (!searchOpen || !deferredSearchQuery.trim()) {
+    if (!searchOpen || !searchQuery.trim()) {
       return [];
     }
 
-    const query = deferredSearchQuery.trim().toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+    const debouncedQuery = debouncedSearchQuery.trim().toLowerCase();
     const tabResults = indexedSearchTabs
       .filter((tab) => tab.searchName.includes(query) || tab.searchPath.includes(query))
       .map((tab) => ({
@@ -2131,18 +2218,18 @@ function App() {
       }));
 
     const tabPaths = new Set(tabResults.map((item) => item.path));
-    const fileResults = workspaceSearchResults
+    const fileResults = (debouncedQuery === query ? workspaceSearchResults : [])
       .filter((file) => !tabPaths.has(file.path))
       .map((file) => ({
         id: `file:${file.path}`,
         label: file.name,
-        description: file.path,
+        description: file.relativePath || file.path,
         badge: UI_TEXT.search.fileBadge,
         path: file.path
       }));
 
     return [...tabResults, ...fileResults].slice(0, 10);
-  }, [deferredSearchQuery, indexedSearchTabs, searchOpen, workspaceSearchResults]);
+  }, [debouncedSearchQuery, indexedSearchTabs, searchOpen, searchQuery, workspaceSearchResults]);
 
   const handleTreeFileOpen = React.useCallback(async (filePath, fileName) => {
     await openFile(filePath);
@@ -2272,10 +2359,16 @@ function App() {
       if (options.afterMutation) {
         await options.afterMutation(result);
       }
+      void refreshWorkspaceSearchResults();
+      if (searchOpen) {
+        window.setTimeout(() => {
+          focusCommandSearchInput();
+        }, 0);
+      }
     } catch (error) {
       showError(error instanceof Error ? error.message : "操作失败");
     }
-  }, [applyWorkspaceTreeMutation, rootPath, showError]);
+  }, [applyWorkspaceTreeMutation, focusCommandSearchInput, refreshWorkspaceSearchResults, rootPath, searchOpen, showError]);
 
   const handleTreeContextMenu = React.useCallback((node, event) => {
     event.preventDefault();
@@ -2407,10 +2500,25 @@ function App() {
   }, []);
 
   const handleDeleteTreeNode = React.useCallback(async (node) => {
-    const confirmed = window.confirm(`确认删除 "${node.name}" 吗？`);
-    if (!confirmed) {
+    setPendingDeleteNode(node);
+  }, []);
+
+  const cancelPendingDelete = React.useCallback(() => {
+    setPendingDeleteNode(null);
+    if (searchOpen) {
+      window.setTimeout(() => {
+        focusCommandSearchInput();
+      }, 0);
+    }
+  }, [focusCommandSearchInput, searchOpen]);
+
+  const confirmPendingDelete = React.useCallback(async () => {
+    if (!pendingDeleteNode) {
       return;
     }
+
+    const node = pendingDeleteNode;
+    setPendingDeleteNode(null);
 
     if (treeRenamingPath && isSameOrDescendantPath(treeRenamingPath, node.path)) {
       setTreeRenamingPath(null);
@@ -2430,7 +2538,7 @@ function App() {
         }
       }
     );
-  }, [removeTabsInPath, rootPath, runTreeMutation, treeRenamingPath]);
+  }, [pendingDeleteNode, removeTabsInPath, rootPath, runTreeMutation, treeRenamingPath]);
 
   const renderSidebarBody = () => {
     if (activeView === "search") {
@@ -2479,7 +2587,7 @@ function App() {
               className="sidebar__workspace-refresh"
               aria-label="刷新工作区"
               title="刷新工作区"
-              onClick={() => void openExternalWorkspacePath(rootPath)}
+              onClick={() => void refreshCurrentWorkspace()}
             >
               ↻
             </button>
@@ -2619,13 +2727,13 @@ function App() {
           <CommandSearch
             searchOpen={searchOpen}
             searchQuery={searchQuery}
+            searchLoading={searchLoading}
             searchInputRef={searchInputRef}
             searchBoxRef={searchBoxRef}
             searchResults={searchResults}
             onOpen={() => setSearchOpen(true)}
             onClose={() => {
               setSearchOpen(false);
-              setSearchQuery("");
             }}
             onQueryChange={setSearchQuery}
             onSelect={(path) => void handleSearchSelect(path)}
@@ -3057,6 +3165,22 @@ function App() {
             setTreeContextMenu(null);
             void handleDeleteTreeNode(treeContextNode);
           }}>删除</button>
+        </div>
+      ) : null}
+      {pendingDeleteNode ? (
+        <div className="confirm-dialog" role="dialog" aria-modal="true" aria-label="确认删除">
+          <button type="button" className="confirm-dialog__backdrop" onClick={cancelPendingDelete} aria-label="关闭确认删除" />
+          <div className="confirm-dialog__panel">
+            <div className="confirm-dialog__title">确认删除</div>
+            <div className="confirm-dialog__message">
+              {`确定要删除 "${pendingDeleteNode.name}" 吗？`}
+            </div>
+            <div className="confirm-dialog__detail">删除后将立即从当前工作区和已打开标签中移除。</div>
+            <div className="confirm-dialog__actions">
+              <button type="button" className="confirm-dialog__button" onClick={cancelPendingDelete}>取消</button>
+              <button type="button" className="confirm-dialog__button confirm-dialog__button--danger" onClick={() => void confirmPendingDelete()}>删除</button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

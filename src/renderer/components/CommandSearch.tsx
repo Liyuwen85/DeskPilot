@@ -12,6 +12,7 @@ interface SearchResultItem {
 interface CommandSearchProps {
   searchOpen: boolean;
   searchQuery: string;
+  searchLoading: boolean;
   searchInputRef: React.RefObject<HTMLInputElement>;
   searchBoxRef: React.RefObject<HTMLDivElement>;
   searchResults: SearchResultItem[];
@@ -24,6 +25,7 @@ interface CommandSearchProps {
 export const CommandSearch = React.memo(function CommandSearch({
   searchOpen,
   searchQuery,
+  searchLoading,
   searchInputRef,
   searchBoxRef,
   searchResults,
@@ -34,6 +36,31 @@ export const CommandSearch = React.memo(function CommandSearch({
 }: CommandSearchProps) {
   const [activeIndex, setActiveIndex] = React.useState(-1);
   const resultRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+  const hasPinnedQuery = searchQuery.trim().length > 0;
+  const showInput = searchOpen || hasPinnedQuery;
+
+  React.useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+
+    const focusInput = () => {
+      const input = searchInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      input.focus();
+      const valueLength = input.value.length;
+      input.setSelectionRange(valueLength, valueLength);
+    };
+
+    focusInput();
+    const frameId = window.requestAnimationFrame(focusInput);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [searchInputRef, searchOpen, searchResults.length]);
 
   React.useEffect(() => {
     if (!searchOpen || !searchQuery.trim() || searchResults.length === 0) {
@@ -70,7 +97,7 @@ export const CommandSearch = React.memo(function CommandSearch({
         }}
       >
         <span className="command-box__icon">{UI_TEXT.search.icon}</span>
-        {searchOpen ? (
+        {showInput ? (
           <>
             <input
               ref={searchInputRef}
@@ -79,6 +106,11 @@ export const CommandSearch = React.memo(function CommandSearch({
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder={UI_TEXT.search.inputPlaceholder}
               onClick={(event) => event.stopPropagation()}
+              onFocus={() => {
+                if (!searchOpen) {
+                  onOpen();
+                }
+              }}
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown" && searchResults.length > 0) {
                   event.preventDefault();
@@ -125,7 +157,9 @@ export const CommandSearch = React.memo(function CommandSearch({
       {searchOpen ? (
         <div className="command-box__panel">
           {searchQuery.trim() ? (
-            searchResults.length > 0 ? (
+            searchLoading ? (
+              <div className="command-box__empty">搜索中...</div>
+            ) : searchResults.length > 0 ? (
               searchResults.map((item) => (
                 <button
                   key={item.id}

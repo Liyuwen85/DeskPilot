@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
@@ -18,6 +19,7 @@ import type {
   SaveFileResult,
   TreeNode,
   WorkspaceIndexEntry,
+  WorkspaceSearchEntry,
   WorkspaceMutationResult,
   WorkspacePayload
 } from "../shared/types";
@@ -33,11 +35,84 @@ type WindowMode = "workspace" | "document";
 const APP_NAME = "DeskPilot";
 const APP_USER_MODEL_ID = "com.doveyh.deskpilot";
 const APP_ICON_PATH = path.join(app.getAppPath(), "screenshot", "deskpilot_logo.png");
+const WORKSPACE_INDEX_VERSION = 1;
+const WORKSPACE_INDEX_SKIPPED_DIRECTORIES = new Set([
+  ".git",
+  ".hg",
+  ".svn",
+  ".idea",
+  ".vscode",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  ".next",
+  ".nuxt",
+  ".astro",
+  ".svelte-kit",
+  ".turbo",
+  ".cache",
+  ".temp",
+  ".tmp",
+  ".parcel-cache",
+  ".vite",
+  ".output",
+  ".vercel",
+  ".yarn",
+  ".pnpm-store",
+  "__pycache__",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".tox",
+  ".venv",
+  "venv",
+  "env",
+  "tmp",
+  "temp",
+  "logs",
+  "log",
+  ".gradle",
+  "target",
+  "bin",
+  "obj"
+]);
+
+function shouldSkipWorkspaceIndexEntry(entryName: string, isDirectory: boolean): boolean {
+  const normalizedName = String(entryName || "").trim();
+  if (!normalizedName) {
+    return true;
+  }
+
+  if (normalizedName.startsWith(".")) {
+    return true;
+  }
+
+  if (!isDirectory) {
+    return false;
+  }
+
+  return WORKSPACE_INDEX_SKIPPED_DIRECTORIES.has(normalizedName.toLowerCase());
+}
 
 let mainWindow: AppWindow | null = null;
 let pendingLaunchWorkspacePath = "";
 let isAppQuitting = false;
 const isDevRuntime = !app.isPackaged || process.env.DESKPILOT_DEV === "1";
+
+type WorkspaceIndexState = {
+  workspacePath: string;
+  indexFilePath: string;
+  entries: WorkspaceIndexEntry[];
+  loadedAt: number;
+  lastValidatedAt: number;
+  version: number;
+  building: Promise<void> | null;
+};
+
+const workspaceIndexStateMap = new Map<string, WorkspaceIndexState>();
+const workspaceIndexRefreshTimerMap = new Map<string, NodeJS.Timeout>();
 
 function normalizeDocumentPath(targetPath?: string): string {
   const rawPath = String(targetPath || "").trim();
@@ -298,52 +373,14 @@ async function readDirectoryChildren(targetPath: string): Promise<TreeNode[]> {
   }));
 }
 
-async function indexWorkspaceFiles(rootPath: string): Promise<WorkspaceIndexEntry[]> {
+async function buildWorkspaceIndexEntries(rootPath: string): Promise<WorkspaceIndexEntry[]> {
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
   const results: WorkspaceIndexEntry[] = [];
 
   async function visitDirectory(directoryPath: string): Promise<void> {
-    const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (entry.name.startsWith(".")) {
-        continue;
-      }
-
-      const entryPath = path.join(directoryPath, entry.name);
-      if (entry.isDirectory()) {
-        await visitDirectory(entryPath);
-        continue;
-      }
-
-      results.push({
-        name: entry.name,
-        path: entryPath
-      });
-    }
-  }
-
-  await visitDirectory(rootPath);
-  return results;
-}
-
-async function searchWorkspaceFiles(rootPath: string, query: string, limit = 8): Promise<WorkspaceIndexEntry[]> {
-  const normalizedQuery = String(query || "").trim().toLowerCase();
-  const normalizedLimit = Math.max(1, Math.min(50, Number(limit) || 8));
-  const results: WorkspaceIndexEntry[] = [];
-  const skippedDirectories = new Set([".git", "node_modules", "dist", "build", "out", "coverage"]);
-
-  if (!normalizedQuery) {
-    return results;
-  }
-
-  async function visitDirectory(directoryPath: string): Promise<void> {
-    if (results.length >= normalizedLimit) {
-      return;
-    }
-
     const entries = await fs.readdir(directoryPath, { withFileTypes: true });
     const visibleEntries = entries
-      .filter((entry) => !entry.name.startsWith("."))
+      .filter((entry) => !shouldSkipWorkspaceIndexEntry(entry.name, entry.isDirectory()))
       .sort((left, right) => {
         if (left.isDirectory() && !right.isDirectory()) return -1;
         if (!left.isDirectory() && right.isDirectory()) return 1;
@@ -351,35 +388,373 @@ async function searchWorkspaceFiles(rootPath: string, query: string, limit = 8):
       });
 
     for (const entry of visibleEntries) {
-      if (results.length >= normalizedLimit) {
-        return;
-      }
-
       const entryPath = path.join(directoryPath, entry.name);
       if (entry.isDirectory()) {
-        if (skippedDirectories.has(entry.name)) {
-          continue;
-        }
-
         await visitDirectory(entryPath);
         continue;
       }
 
-      const searchName = entry.name.toLowerCase();
-      const searchPath = entryPath.toLowerCase();
-      if (!searchName.includes(normalizedQuery) && !searchPath.includes(normalizedQuery)) {
+      let stat: fsSync.Stats;
+      try {
+        stat = await fs.stat(entryPath);
+      } catch {
         continue;
       }
 
-      results.push({
-        name: entry.name,
-        path: entryPath
-      });
+      if (!stat.isFile()) {
+        continue;
+      }
+
+      results.push(createWorkspaceIndexEntry(normalizedRootPath, entryPath, stat));
     }
   }
 
-  await visitDirectory(rootPath);
+  await visitDirectory(normalizedRootPath);
   return results;
+}
+
+function normalizeWorkspacePath(targetPath: string): string {
+  const normalizedPath = path.normalize(path.resolve(targetPath));
+  return process.platform === "win32" ? normalizedPath.toLowerCase() : normalizedPath;
+}
+
+function isSameOrDescendantWorkspacePath(targetPath: string, parentPath: string): boolean {
+  const normalizedTargetPath = normalizeWorkspacePath(targetPath);
+  const normalizedParentPath = normalizeWorkspacePath(parentPath);
+  return normalizedTargetPath === normalizedParentPath || normalizedTargetPath.startsWith(`${normalizedParentPath}${path.sep}`);
+}
+
+function replaceWorkspacePathPrefix(targetPath: string, sourcePath: string, destinationPath: string): string {
+  const normalizedTargetPath = normalizeWorkspacePath(targetPath);
+  const normalizedSourcePath = normalizeWorkspacePath(sourcePath);
+
+  if (normalizedTargetPath === normalizedSourcePath) {
+    return destinationPath;
+  }
+
+  if (!normalizedTargetPath.startsWith(`${normalizedSourcePath}${path.sep}`)) {
+    return targetPath;
+  }
+
+  const suffix = targetPath.slice(sourcePath.length).replace(/^[\\/]+/, "");
+  return path.join(destinationPath, suffix);
+}
+
+function getWorkspaceIndexDirectoryPath(): string {
+  return path.join(app.getPath("userData"), "cache", "workspace-indexes");
+}
+
+function getWorkspaceIndexFilePath(rootPath: string): string {
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
+  const hash = createHash("sha1").update(normalizedRootPath).digest("hex");
+  return path.join(getWorkspaceIndexDirectoryPath(), `${hash}.v${WORKSPACE_INDEX_VERSION}.idx`);
+}
+
+async function ensureWorkspaceIndexDirectoryExists(): Promise<void> {
+  await fs.mkdir(getWorkspaceIndexDirectoryPath(), { recursive: true });
+}
+
+function sanitizeWorkspaceIndexField(value: string): string {
+  return String(value || "").replace(/[\t\r\n]/g, " ");
+}
+
+function getRelativeWorkspacePath(rootPath: string, filePath: string): string {
+  const relativePath = path.relative(rootPath, filePath);
+  return relativePath.split(path.sep).join("/");
+}
+
+function createWorkspaceIndexEntry(rootPath: string, filePath: string, stat: fsSync.Stats): WorkspaceIndexEntry {
+  const relativePath = getRelativeWorkspacePath(rootPath, filePath);
+  const name = path.basename(filePath);
+  const ext = path.extname(filePath).replace(/^\./, "").toLowerCase();
+
+  return {
+    relativePath,
+    name,
+    path: filePath,
+    ext,
+    mtimeMs: Math.floor(stat.mtimeMs || 0),
+    size: stat.size || 0
+  };
+}
+
+function serializeWorkspaceIndexEntry(entry: WorkspaceIndexEntry): string {
+  return [
+    sanitizeWorkspaceIndexField(entry.relativePath),
+    sanitizeWorkspaceIndexField(entry.name),
+    sanitizeWorkspaceIndexField(entry.ext),
+    String(Math.max(0, Math.floor(Number(entry.mtimeMs) || 0))),
+    String(Math.max(0, Math.floor(Number(entry.size) || 0)))
+  ].join("\t");
+}
+
+function parseWorkspaceIndexLine(rootPath: string, line: string): WorkspaceIndexEntry | null {
+  const trimmedLine = String(line || "").trim();
+  if (!trimmedLine) {
+    return null;
+  }
+
+  const [relativePath = "", name = "", ext = "", mtimeMs = "0", size = "0"] = trimmedLine.split("\t");
+  if (!relativePath || !name) {
+    return null;
+  }
+
+  const normalizedRelativePath = relativePath.replace(/[\\/]+/g, "/");
+  const fullPath = path.join(rootPath, ...normalizedRelativePath.split("/"));
+  return {
+    relativePath: normalizedRelativePath,
+    name,
+    path: fullPath,
+    ext: ext.toLowerCase(),
+    mtimeMs: Math.max(0, Number(mtimeMs) || 0),
+    size: Math.max(0, Number(size) || 0)
+  };
+}
+
+async function readWorkspaceIndexFile(rootPath: string, indexFilePath: string): Promise<WorkspaceIndexEntry[] | null> {
+  try {
+    const content = await fs.readFile(indexFilePath, "utf-8");
+    const entries = content
+      .split(/\r?\n/)
+      .map((line) => parseWorkspaceIndexLine(rootPath, line))
+      .filter(Boolean) as WorkspaceIndexEntry[];
+    return entries;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    return null;
+  }
+}
+
+async function writeWorkspaceIndexFile(indexFilePath: string, entries: WorkspaceIndexEntry[]): Promise<void> {
+  await ensureWorkspaceIndexDirectoryExists();
+  const tempFilePath = `${indexFilePath}.tmp`;
+  const content = entries.map(serializeWorkspaceIndexEntry).join("\n");
+  await fs.writeFile(tempFilePath, content, "utf-8");
+  await fs.rename(tempFilePath, indexFilePath);
+}
+
+function getOrCreateWorkspaceIndexState(rootPath: string): WorkspaceIndexState {
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
+  const existingState = workspaceIndexStateMap.get(normalizedRootPath);
+  if (existingState) {
+    return existingState;
+  }
+
+  const nextState: WorkspaceIndexState = {
+    workspacePath: normalizedRootPath,
+    indexFilePath: getWorkspaceIndexFilePath(normalizedRootPath),
+    entries: [],
+    loadedAt: 0,
+    lastValidatedAt: 0,
+    version: WORKSPACE_INDEX_VERSION,
+    building: null
+  };
+  workspaceIndexStateMap.set(normalizedRootPath, nextState);
+  return nextState;
+}
+
+function hasLiveWorkspaceIndex(rootPath: string): boolean {
+  const state = workspaceIndexStateMap.get(normalizeWorkspacePath(rootPath));
+  return Boolean(state && (state.entries.length > 0 || state.building));
+}
+
+async function upsertWorkspaceIndexEntry(rootPath: string, filePath: string): Promise<void> {
+  if (!hasLiveWorkspaceIndex(rootPath)) {
+    return;
+  }
+
+  let stat: fsSync.Stats;
+  try {
+    stat = await fs.stat(filePath);
+  } catch {
+    return;
+  }
+
+  if (!stat.isFile()) {
+    return;
+  }
+
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
+  const state = getOrCreateWorkspaceIndexState(normalizedRootPath);
+  const nextEntry = createWorkspaceIndexEntry(normalizedRootPath, filePath, stat);
+  const existingIndex = state.entries.findIndex((entry) => normalizeWorkspacePath(entry.path) === normalizeWorkspacePath(filePath));
+
+  if (existingIndex >= 0) {
+    state.entries[existingIndex] = nextEntry;
+  } else {
+    state.entries = [...state.entries, nextEntry];
+  }
+
+  state.loadedAt = Date.now();
+  state.lastValidatedAt = state.loadedAt;
+}
+
+function removeWorkspaceIndexEntriesInPath(rootPath: string, targetPath: string): void {
+  if (!hasLiveWorkspaceIndex(rootPath)) {
+    return;
+  }
+
+  const state = getOrCreateWorkspaceIndexState(rootPath);
+  const nextEntries = state.entries.filter((entry) => !isSameOrDescendantWorkspacePath(entry.path, targetPath));
+  if (nextEntries.length === state.entries.length) {
+    return;
+  }
+
+  state.entries = nextEntries;
+  state.loadedAt = Date.now();
+  state.lastValidatedAt = state.loadedAt;
+}
+
+async function remapWorkspaceIndexEntriesInPath(rootPath: string, sourcePath: string, destinationPath: string): Promise<void> {
+  if (!hasLiveWorkspaceIndex(rootPath)) {
+    return;
+  }
+
+  let destinationStat: fsSync.Stats;
+  try {
+    destinationStat = await fs.stat(destinationPath);
+  } catch {
+    return;
+  }
+
+  const state = getOrCreateWorkspaceIndexState(rootPath);
+  let changed = false;
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
+
+  state.entries = state.entries.map((entry) => {
+    if (!isSameOrDescendantWorkspacePath(entry.path, sourcePath)) {
+      return entry;
+    }
+
+    changed = true;
+    const nextPath = replaceWorkspacePathPrefix(entry.path, sourcePath, destinationPath);
+    return {
+      ...entry,
+      path: nextPath,
+      relativePath: getRelativeWorkspacePath(normalizedRootPath, nextPath),
+      name: path.basename(nextPath),
+      ext: path.extname(nextPath).replace(/^\./, "").toLowerCase()
+    };
+  });
+
+  if (!changed) {
+    if (destinationStat.isFile()) {
+      await upsertWorkspaceIndexEntry(rootPath, destinationPath);
+    }
+    return;
+  }
+
+  state.loadedAt = Date.now();
+  state.lastValidatedAt = state.loadedAt;
+}
+
+async function ensureWorkspaceIndex(rootPath: string, options: { forceRebuild?: boolean } = {}): Promise<WorkspaceIndexState> {
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
+  const state = getOrCreateWorkspaceIndexState(normalizedRootPath);
+
+  if (!options.forceRebuild && state.entries.length > 0) {
+    state.lastValidatedAt = Date.now();
+    return state;
+  }
+
+  if (state.building) {
+    await state.building;
+    return state;
+  }
+
+  state.building = (async () => {
+    if (!options.forceRebuild) {
+      const diskEntries = await readWorkspaceIndexFile(normalizedRootPath, state.indexFilePath);
+      if (diskEntries) {
+        state.entries = diskEntries;
+        state.loadedAt = Date.now();
+        state.lastValidatedAt = state.loadedAt;
+        return;
+      }
+    }
+
+    const builtEntries = await buildWorkspaceIndexEntries(normalizedRootPath);
+    await writeWorkspaceIndexFile(state.indexFilePath, builtEntries);
+    state.entries = builtEntries;
+    state.loadedAt = Date.now();
+    state.lastValidatedAt = state.loadedAt;
+  })().finally(() => {
+    state.building = null;
+  });
+
+  await state.building;
+  return state;
+}
+
+function scheduleWorkspaceIndexRefresh(rootPath: string, delayMs = 120): void {
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
+  const existingTimer = workspaceIndexRefreshTimerMap.get(normalizedRootPath);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  const timer = setTimeout(() => {
+    workspaceIndexRefreshTimerMap.delete(normalizedRootPath);
+    void ensureWorkspaceIndex(normalizedRootPath, { forceRebuild: true }).catch((error) => {
+      console.error("[workspace-index] background refresh failed", normalizedRootPath, error);
+    });
+  }, delayMs);
+
+  workspaceIndexRefreshTimerMap.set(normalizedRootPath, timer);
+}
+
+function getWorkspaceSearchScore(entry: WorkspaceIndexEntry, normalizedQuery: string): number {
+  const searchName = entry.name.toLowerCase();
+  const searchRelativePath = entry.relativePath.toLowerCase();
+
+  if (searchName === normalizedQuery) {
+    return 4000;
+  }
+  if (searchName.startsWith(normalizedQuery)) {
+    return 3000 - searchName.length;
+  }
+  if (searchName.includes(normalizedQuery)) {
+    return 2000 - searchName.indexOf(normalizedQuery);
+  }
+  if (searchRelativePath.startsWith(normalizedQuery)) {
+    return 1000 - searchRelativePath.length;
+  }
+  if (searchRelativePath.includes(normalizedQuery)) {
+    return 500 - searchRelativePath.indexOf(normalizedQuery);
+  }
+  return -1;
+}
+
+async function searchWorkspaceFiles(rootPath: string, query: string, limit = 8): Promise<WorkspaceSearchEntry[]> {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const normalizedLimit = Math.max(1, Math.min(50, Number(limit) || 8));
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const state = await ensureWorkspaceIndex(rootPath);
+  return state.entries
+    .map((entry) => ({
+      ...entry,
+      score: getWorkspaceSearchScore(entry, normalizedQuery)
+    }))
+    .filter((entry) => entry.score >= 0)
+    .sort((left, right) => {
+      if ((right.score || 0) !== (left.score || 0)) {
+        return (right.score || 0) - (left.score || 0);
+      }
+      return left.relativePath.localeCompare(right.relativePath, "zh-CN");
+    })
+    .slice(0, normalizedLimit)
+    .map((entry) => ({
+      name: entry.name,
+      path: entry.path,
+      relativePath: entry.relativePath,
+      score: entry.score
+    }));
 }
 
 async function readFilePayload(filePath: string): Promise<FileTab> {
@@ -873,7 +1248,14 @@ ipcMain.handle("workspace:open-path", async (_event, targetPath: string) => {
     throw new Error("Target path is required.");
   }
 
-  return loadWorkspaceFromPath(targetPath);
+  const result = await loadWorkspaceFromPath(targetPath);
+  if (result?.rootPath) {
+    void ensureWorkspaceIndex(result.rootPath).catch((error) => {
+      console.error("[workspace-index] preload failed", result.rootPath, error);
+    });
+  }
+
+  return result;
 });
 
 ipcMain.handle("workspace:read-directory", async (_event, directoryPath: string) => {
@@ -889,19 +1271,6 @@ ipcMain.handle("workspace:read-directory", async (_event, directoryPath: string)
   return readDirectoryChildren(directoryPath);
 });
 
-ipcMain.handle("workspace:index-files", async (_event, rootPath: string) => {
-  if (typeof rootPath !== "string" || !rootPath) {
-    throw new Error("Workspace root path is required.");
-  }
-
-  const stat = await fs.stat(rootPath);
-  if (!stat.isDirectory()) {
-    throw new Error("Workspace root path is invalid.");
-  }
-
-  return indexWorkspaceFiles(rootPath);
-});
-
 ipcMain.handle("workspace:search-files", async (_event, rootPath: string, query: string, limit?: number) => {
   if (typeof rootPath !== "string" || !rootPath) {
     throw new Error("Workspace root path is required.");
@@ -913,6 +1282,20 @@ ipcMain.handle("workspace:search-files", async (_event, rootPath: string, query:
   }
 
   return searchWorkspaceFiles(rootPath, query, limit);
+});
+
+ipcMain.handle("workspace:refresh-index", async (_event, rootPath: string) => {
+  if (typeof rootPath !== "string" || !rootPath) {
+    throw new Error("Workspace root path is required.");
+  }
+
+  const stat = await fs.stat(rootPath);
+  if (!stat.isDirectory()) {
+    throw new Error("Workspace root path is invalid.");
+  }
+
+  await ensureWorkspaceIndex(rootPath, { forceRebuild: true });
+  return { ok: true };
 });
 
 ipcMain.handle("viewer:read", async (_event, filePath: string) => {
@@ -951,6 +1334,8 @@ ipcMain.handle("file:create-markdown", async (_event, payload: CreateMarkdownPay
   const requestedName = normalizeMarkdownName(payload.fileName);
   const filePath = await findAvailableFilePath(targetDirectory, requestedName);
   await fs.writeFile(filePath, "", "utf-8");
+  await upsertWorkspaceIndexEntry(payload.rootPath, filePath);
+  scheduleWorkspaceIndexRefresh(payload.rootPath);
 
   return {
     filePath,
@@ -971,6 +1356,8 @@ ipcMain.handle("file:create-text", async (_event, payload: CreateTextPayload): P
   await ensureDirectoryPath(targetDirectory);
   const filePath = await findAvailableFilePath(targetDirectory, normalizeTextName(payload.fileName));
   await fs.writeFile(filePath, "", "utf-8");
+  await upsertWorkspaceIndexEntry(payload.rootPath, filePath);
+  scheduleWorkspaceIndexRefresh(payload.rootPath);
   return buildWorkspaceMutationResult(payload.rootPath, filePath);
 });
 
@@ -986,6 +1373,7 @@ ipcMain.handle("file:create-folder", async (_event, payload: CreateFolderPayload
   await ensureDirectoryPath(targetDirectory);
   const folderPath = await findAvailableDirectoryPath(targetDirectory, normalizeFolderName(payload.folderName));
   await fs.mkdir(folderPath, { recursive: true });
+  scheduleWorkspaceIndexRefresh(payload.rootPath);
   return buildWorkspaceMutationResult(payload.rootPath, folderPath);
 });
 
@@ -1009,6 +1397,8 @@ ipcMain.handle("file:rename", async (_event, payload: RenamePathPayload): Promis
   if (nextPath !== payload.targetPath) {
     await renameOrMove(payload.targetPath, nextPath);
   }
+  await remapWorkspaceIndexEntriesInPath(payload.rootPath, payload.targetPath, nextPath);
+  scheduleWorkspaceIndexRefresh(payload.rootPath);
 
   return buildWorkspaceMutationResult(payload.rootPath, nextPath);
 });
@@ -1019,6 +1409,8 @@ ipcMain.handle("file:delete", async (_event, payload: DeletePathPayload): Promis
   }
 
   await fs.rm(payload.targetPath, { recursive: true, force: true });
+  removeWorkspaceIndexEntriesInPath(payload.rootPath, payload.targetPath);
+  scheduleWorkspaceIndexRefresh(payload.rootPath);
   return buildWorkspaceMutationResult(payload.rootPath);
 });
 
