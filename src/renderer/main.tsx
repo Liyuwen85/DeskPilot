@@ -484,6 +484,7 @@ function App() {
   const detachedDocumentPathsRef = React.useRef(detachedDocumentPaths);
   const outlineApiMapRef = React.useRef(new Map<string, TiptapOutlineApi>());
   const commandApiMapRef = React.useRef(new Map<string, TiptapCommandApi>());
+  // Keep workspace indexing on-demand only; eager reindexing previously caused major memory growth.
   const indexedFilesRootPathRef = React.useRef("");
   const searchIndexTaskRef = React.useRef<Promise<void> | null>(null);
   const { toast, showSuccess, showError } = useToast();
@@ -640,6 +641,7 @@ function App() {
       return;
     }
 
+    // Release the cached file list as soon as search closes.
     indexedFilesRootPathRef.current = "";
     searchIndexTaskRef.current = null;
     setIndexedFiles([]);

@@ -82,6 +82,7 @@ export const EditorHost = React.memo(function EditorHost({
       const recentPaths = filtered.filter((path) => !stickyPaths.has(path) && path !== activeTabPath);
       const next = [activeTabPath, ...persistedPaths, ...recentPaths];
       const uniqueNext = Array.from(new Set(next)).slice(0, 2 + persistedPaths.length);
+      // Reuse the previous array when nothing changed to avoid renderer update churn.
       if (previous.length === uniqueNext.length && previous.every((path, index) => path === uniqueNext[index])) {
         return previous;
       }

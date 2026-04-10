@@ -86,6 +86,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const tabTextMapRef = React.useRef(tabTextMap);
   const savedTextMapRef = React.useRef(savedTextMap);
   const { toast, showSuccess, showError } = useToast();
+  // EditorHost is sensitive to unstable props here; keep the single-tab array memoized.
   const editorTabs = React.useMemo(() => (tab ? [tab] : []), [tab]);
 
   React.useEffect(() => {
