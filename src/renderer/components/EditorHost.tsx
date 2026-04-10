@@ -13,6 +13,8 @@ const LazyTiptapTabPane = React.lazy(async () => {
   return { default: module.TiptapTabPane };
 });
 
+const MAX_MOUNTED_REGULAR_TABS = 4;
+
 interface FileTabLike {
   path: string;
   name?: string;
@@ -84,7 +86,7 @@ export const EditorHost = React.memo(function EditorHost({
       const persistedPaths = filtered.filter((path) => stickyPaths.has(path) && path !== activeTabPath);
       const recentPaths = filtered.filter((path) => !stickyPaths.has(path) && path !== activeTabPath);
       const next = [activeTabPath, ...persistedPaths, ...recentPaths];
-      const uniqueNext = Array.from(new Set(next)).slice(0, 2 + persistedPaths.length);
+      const uniqueNext = Array.from(new Set(next)).slice(0, MAX_MOUNTED_REGULAR_TABS + persistedPaths.length);
       // Reuse the previous array when nothing changed to avoid renderer update churn.
       if (previous.length === uniqueNext.length && previous.every((path, index) => path === uniqueNext[index])) {
         return previous;

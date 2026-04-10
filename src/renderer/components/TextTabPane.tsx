@@ -1,7 +1,7 @@
 import React from "react";
 import { EditorSelection, EditorState, StateEffect, StateField } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { Decoration, EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from "@codemirror/view";
+import { Decoration, EditorView, gutter, keymap, lineNumbers } from "@codemirror/view";
 import { HighlightStyle, StreamLanguage, defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { markdown } from "@codemirror/lang-markdown";
@@ -22,6 +22,8 @@ import { powerShell as powershellMode } from "@codemirror/legacy-modes/mode/powe
 import { toml as tomlMode } from "@codemirror/legacy-modes/mode/toml";
 import { dockerFile as dockerfileMode } from "@codemirror/legacy-modes/mode/dockerfile";
 import { FindPanel } from "./FindPanel";
+
+const textTabScrollPositionMap = new Map();
 
 function normalizeText(value) {
   return typeof value === "string" ? value : "";
@@ -218,31 +220,36 @@ function createEditorTheme() {
     ".cm-scroller": {
       overflow: "auto",
       fontFamily: 'Consolas, "Cascadia Mono", monospace',
-      lineHeight: "1.7"
+      lineHeight: "24px"
     },
     ".cm-content, .cm-gutter": {
       fontFamily: 'Consolas, "Cascadia Mono", monospace',
-      fontSize: "13px"
+      fontSize: "12px",
+      lineHeight: "24px"
     },
     ".cm-content": {
-      padding: "18px 16px"
+      padding: "16px 12px"
     },
     ".cm-line": {
-      padding: "0"
+      padding: "0",
+      minHeight: "24px"
     },
     ".cm-gutters": {
+      flex: "0 0 auto",
       borderRight: "1px solid var(--editor-border)",
       backgroundColor: "#f8fafc",
       color: "#94a3b8"
     },
+    ".cm-lineNumbers": {
+      minWidth: "52px"
+    },
+    ".cm-gutterElement": {
+      minHeight: "24px",
+      lineHeight: "24px",
+      boxSizing: "border-box"
+    },
     ".cm-lineNumbers .cm-gutterElement": {
-      padding: "0 10px 0 14px"
-    },
-    ".cm-activeLineGutter": {
-      backgroundColor: "#f8fafc"
-    },
-    ".cm-activeLine": {
-      backgroundColor: "rgba(0, 0, 0, 0.028)"
+      padding: "0 12px"
     },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
       backgroundColor: "rgba(59, 130, 246, 0.22)"
@@ -250,6 +257,40 @@ function createEditorTheme() {
     ".cm-cursor, &.cm-focused .cm-cursor": {
       borderLeftColor: "#2563eb"
     }
+  });
+}
+
+function createSimpleLineNumbers() {
+  return [
+    lineNumbers({
+      formatNumber: (lineNo) => String(lineNo)
+    }),
+    gutter({
+      class: "cm-gutter-spacer"
+    })
+  ];
+}
+
+function getStoredScrollPosition(tabPath) {
+  const cached = textTabScrollPositionMap.get(tabPath);
+  if (!cached) {
+    return { top: 0, left: 0 };
+  }
+
+  return {
+    top: Math.max(0, Number(cached.top) || 0),
+    left: Math.max(0, Number(cached.left) || 0)
+  };
+}
+
+function storeScrollPosition(tabPath, element) {
+  if (!tabPath || !element) {
+    return;
+  }
+
+  textTabScrollPositionMap.set(tabPath, {
+    top: element.scrollTop,
+    left: element.scrollLeft
   });
 }
 
@@ -262,6 +303,10 @@ export function TextTabPane({
 }) {
   const hostRef = React.useRef(null);
   const editorViewRef = React.useRef(null);
+  const scrollElementRef = React.useRef(null);
+  const activeRef = React.useRef(active);
+  const onTextChangeRef = React.useRef(onTextChange);
+  const onSaveShortcutRef = React.useRef(onSaveShortcut);
   const lastExternalValueRef = React.useRef(normalizeEditorText(content));
   const [findOpen, setFindOpen] = React.useState(false);
   const [findQuery, setFindQuery] = React.useState("");
@@ -275,6 +320,18 @@ export function TextTabPane({
   }, [normalizedContent]);
 
   React.useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+
+  React.useEffect(() => {
+    onTextChangeRef.current = onTextChange;
+  }, [onTextChange]);
+
+  React.useEffect(() => {
+    onSaveShortcutRef.current = onSaveShortcut;
+  }, [onSaveShortcut]);
+
+  React.useEffect(() => {
     if (!hostRef.current || editorViewRef.current) {
       return;
     }
@@ -282,7 +339,7 @@ export function TextTabPane({
     const saveKeymap = {
       key: "Mod-s",
       run: () => {
-        onSaveShortcut?.();
+        onSaveShortcutRef.current?.();
         return true;
       }
     };
@@ -306,10 +363,8 @@ export function TextTabPane({
     const state = EditorState.create({
       doc: lastExternalValueRef.current,
       extensions: [
-        lineNumbers(),
+        ...createSimpleLineNumbers(),
         history(),
-        drawSelection(),
-        highlightActiveLine(),
         currentMatchField,
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         syntaxHighlighting(strongerHighlightStyle),
@@ -322,7 +377,7 @@ export function TextTabPane({
 
           const value = update.state.doc.toString();
           lastExternalValueRef.current = value;
-          onTextChange(tabPath, value);
+          onTextChangeRef.current(tabPath, value);
         }),
         createEditorTheme()
       ]
@@ -333,11 +388,32 @@ export function TextTabPane({
       parent: hostRef.current
     });
 
+    const scrollElement = editorViewRef.current.scrollDOM;
+    scrollElementRef.current = scrollElement;
+    const handleScroll = () => {
+      if (!activeRef.current) {
+        return;
+      }
+      storeScrollPosition(tabPath, scrollElement);
+    };
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    const restoreInitialPosition = () => {
+      const initialPosition = getStoredScrollPosition(tabPath);
+      scrollElement.scrollTop = initialPosition.top;
+      scrollElement.scrollLeft = initialPosition.left;
+    };
+    restoreInitialPosition();
+    const frameId = window.requestAnimationFrame(restoreInitialPosition);
+
     return () => {
+      window.cancelAnimationFrame(frameId);
+      storeScrollPosition(tabPath, scrollElement);
+      scrollElement.removeEventListener("scroll", handleScroll);
+      scrollElementRef.current = null;
       editorViewRef.current?.destroy();
       editorViewRef.current = null;
     };
-  }, [onSaveShortcut, onTextChange, tabPath]);
+  }, [tabPath]);
 
   React.useEffect(() => {
     const view = editorViewRef.current;
@@ -408,6 +484,7 @@ export function TextTabPane({
   React.useEffect(() => {
     if (!active) {
       setFindOpen(false);
+      storeScrollPosition(tabPath, scrollElementRef.current);
     }
   }, [active]);
 
@@ -462,7 +539,7 @@ export function TextTabPane({
       <div className="code-view">
         <div
           ref={hostRef}
-          className="editor-content editor-content--text editor-content--codemirror"
+          className="editor-content editor-content--codemirror"
         />
       </div>
     </div>

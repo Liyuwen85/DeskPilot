@@ -1811,12 +1811,17 @@ input {
 }
 
 .editor-content--codemirror {
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  background: var(--editor-surface);
 }
 
 .editor-content--codemirror .cm-editor {
   height: 100%;
+  contain: layout paint;
 }
 
 .editor-content--codemirror .cm-search-match-current {
@@ -1827,6 +1832,15 @@ input {
 
 .editor-content--codemirror .cm-scroller {
   overflow: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.editor-content--codemirror .cm-gutters {
+  contain: paint;
+  transform: translateZ(0);
 }
 
 .editor-content--tiptap .ProseMirror::-webkit-scrollbar,
