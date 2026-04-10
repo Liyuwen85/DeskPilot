@@ -22,7 +22,7 @@ const rendererMode = rendererSearchParams.get("mode");
 const documentTargetPath = rendererSearchParams.get("targetPath") || "";
 const REPOSITORY_URL = "https://github.com/Liyuwen85/DeskPilot";
 const GETTING_STARTED_URL = `${REPOSITORY_URL}/blob/main/README.md`;
-const MARKDOWN_HANDBOOK_URL = `${REPOSITORY_URL}/blob/main/docs/markdown-handbook.zh-CN.md`;
+const MARKDOWN_HANDBOOK_URL = `${REPOSITORY_URL}/blob/main/markdown-handbook.zh-CN.md`;
 const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`;
 
 console.log("[renderer:boot]", {
@@ -2362,6 +2362,20 @@ function App() {
 
     return (
       <>
+        {rootPath ? (
+          <div className="sidebar__workspace-path" title={rootPath}>
+            <span className="sidebar__workspace-path-text">当前工作区：{rootPath}</span>
+            <button
+              type="button"
+              className="sidebar__workspace-refresh"
+              aria-label="刷新工作区"
+              title="刷新工作区"
+              onClick={() => void openExternalWorkspacePath(rootPath)}
+            >
+              ↻
+            </button>
+          </div>
+        ) : null}
         <TreeView
           tree={tree}
           expandedPaths={expandedPaths}
