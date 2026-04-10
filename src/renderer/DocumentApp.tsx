@@ -86,6 +86,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const tabTextMapRef = React.useRef(tabTextMap);
   const savedTextMapRef = React.useRef(savedTextMap);
   const { toast, showSuccess, showError } = useToast();
+  const editorTabs = React.useMemo(() => (tab ? [tab] : []), [tab]);
 
   React.useEffect(() => {
     tabRef.current = tab;
@@ -400,6 +401,32 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
     }
   }, []);
 
+  const handleOutlineChange = React.useCallback((_tabPath: string, items: TiptapOutlineItem[]) => {
+    setOutlineItems(items);
+  }, []);
+
+  const handleOutlineApiReady = React.useCallback((_tabPath: string, api: TiptapOutlineApi | null) => {
+    outlineApiRef.current = api;
+  }, []);
+
+  const handleCommandApiReady = React.useCallback((_tabPath: string, api: TiptapCommandApi | null) => {
+    commandApiRef.current = api;
+  }, []);
+
+  const handlePreviewStatusChange = React.useCallback((tabPath: string, status: any) => {
+    setPreviewStatusMap((previous) => {
+      if (!status) {
+        if (!(tabPath in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[tabPath];
+        return next;
+      }
+      return { ...previous, [tabPath]: status };
+    });
+  }, []);
+
   if (loadError) {
     return (
       <div id="app-shell" className="app-shell--document">
@@ -507,32 +534,16 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
         <section className={`viewer ${tab ? "" : "viewer--empty"}`}>
           <div className={`viewer__layout ${showOutlinePane ? "viewer__layout--with-outline" : ""}`}>
             <EditorHost
-              tabs={tab ? [tab] : []}
+              tabs={editorTabs}
               activeTabPath={tab?.path || null}
               markdownDraftMap={markdownDraftMap}
               textContentMap={tabTextMap}
               onTextChange={handleTextChange}
               onSaveShortcut={() => void saveCurrentWithToast()}
-              onOutlineChange={(_tabPath, items) => setOutlineItems(items)}
-              onOutlineApiReady={(_tabPath, api) => {
-                outlineApiRef.current = api;
-              }}
-              onCommandApiReady={(_tabPath, api) => {
-                commandApiRef.current = api;
-              }}
-              onPreviewStatusChange={(tabPath, status) => {
-                setPreviewStatusMap((previous) => {
-                  if (!status) {
-                    if (!(tabPath in previous)) {
-                      return previous;
-                    }
-                    const next = { ...previous };
-                    delete next[tabPath];
-                    return next;
-                  }
-                  return { ...previous, [tabPath]: status };
-                });
-              }}
+              onOutlineChange={handleOutlineChange}
+              onOutlineApiReady={handleOutlineApiReady}
+              onCommandApiReady={handleCommandApiReady}
+              onPreviewStatusChange={handlePreviewStatusChange}
             />
             {showOutlinePane ? (
               <aside className="outline-pane" aria-label={UI_TEXT.statusbar.outline}>

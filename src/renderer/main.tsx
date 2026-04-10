@@ -484,22 +484,46 @@ function App() {
   const detachedDocumentPathsRef = React.useRef(detachedDocumentPaths);
   const outlineApiMapRef = React.useRef(new Map<string, TiptapOutlineApi>());
   const commandApiMapRef = React.useRef(new Map<string, TiptapCommandApi>());
+  const indexedFilesRootPathRef = React.useRef("");
+  const searchIndexTaskRef = React.useRef<Promise<void> | null>(null);
   const { toast, showSuccess, showError } = useToast();
 
   const refreshSearchIndex = React.useCallback(async (workspaceRootPath) => {
     const nextRootPath = String(workspaceRootPath || "").trim();
     if (!nextRootPath) {
+      indexedFilesRootPathRef.current = "";
       setIndexedFiles([]);
       return;
     }
 
-    try {
-      const files = await window.desktopApi.indexWorkspaceFiles(nextRootPath);
-      setIndexedFiles(Array.isArray(files) ? files : []);
-    } catch {
-      setIndexedFiles([]);
+    if (!searchOpen) {
+      return;
     }
-  }, []);
+
+    if (indexedFilesRootPathRef.current === nextRootPath && indexedFiles.length > 0) {
+      return;
+    }
+
+    if (searchIndexTaskRef.current) {
+      return searchIndexTaskRef.current;
+    }
+
+    const task = (async () => {
+      try {
+        const files = await window.desktopApi.indexWorkspaceFiles(nextRootPath);
+        indexedFilesRootPathRef.current = nextRootPath;
+        setIndexedFiles(Array.isArray(files) ? files : []);
+      } catch {
+        indexedFilesRootPathRef.current = "";
+        setIndexedFiles([]);
+      } finally {
+        searchIndexTaskRef.current = null;
+      }
+    })();
+
+    searchIndexTaskRef.current = task;
+    return task;
+  }, [indexedFiles.length, searchOpen]);
 
   React.useEffect(() => {
     treeRef.current = tree;
@@ -612,8 +636,14 @@ function App() {
   React.useEffect(() => {
     if (searchOpen) {
       searchInputRef.current?.focus();
+      void refreshSearchIndex(rootPath);
+      return;
     }
-  }, [searchOpen]);
+
+    indexedFilesRootPathRef.current = "";
+    searchIndexTaskRef.current = null;
+    setIndexedFiles([]);
+  }, [refreshSearchIndex, rootPath, searchOpen]);
 
   const getPersistedContentForTab = React.useCallback(async (tab) => {
     if (!tab || tab.kind === "binary" || tab.kind === "image" || tab.kind === "audio" || tab.kind === "video" || tab.kind === "pdf" || tab.kind === "webpage" || tab.kind === "notebook") {
@@ -910,7 +940,6 @@ function App() {
           treeRef.current = nextTree;
           return nextTree;
         });
-        void refreshSearchIndex(rootPath || directoryPath);
         return children;
       })
       .finally(() => {
@@ -927,7 +956,7 @@ function App() {
 
     treeLoadTasksRef.current.set(directoryPath, loadTask);
     return loadTask;
-  }, [refreshSearchIndex, rootPath]);
+  }, [rootPath]);
 
   const ensureDirectoryVisible = React.useCallback(async (directoryPath) => {
     if (!directoryPath || !rootPath || !isPathInsideRoot(directoryPath, rootPath)) {
@@ -1115,12 +1144,10 @@ function App() {
       setTree(result.tree);
     }
 
-    void refreshSearchIndex(result.rootPath);
-
     if (result.file) {
       openFilePayload(result.file);
     }
-  }, [openFilePayload, refreshSearchIndex]);
+  }, [openFilePayload]);
 
   const openExternalWorkspacePath = React.useCallback(async (targetPath) => {
     if (!targetPath) {
@@ -1912,11 +1939,10 @@ function App() {
 
     treeRef.current = result.tree;
     setTree(result.tree);
-    void refreshSearchIndex(result.rootPath);
     if (options.expandPath) {
       await ensureDirectoryVisible(options.expandPath);
     }
-  }, [ensureDirectoryVisible, refreshSearchIndex]);
+  }, [ensureDirectoryVisible]);
 
   const removeTabsInPath = React.useCallback((targetPath) => {
     if (!targetPath) {

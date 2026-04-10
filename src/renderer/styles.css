@@ -408,6 +408,9 @@ input {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .command-result__label {

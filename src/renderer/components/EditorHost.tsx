@@ -81,7 +81,11 @@ export const EditorHost = React.memo(function EditorHost({
       const persistedPaths = filtered.filter((path) => stickyPaths.has(path) && path !== activeTabPath);
       const recentPaths = filtered.filter((path) => !stickyPaths.has(path) && path !== activeTabPath);
       const next = [activeTabPath, ...persistedPaths, ...recentPaths];
-      return Array.from(new Set(next)).slice(0, 2 + persistedPaths.length);
+      const uniqueNext = Array.from(new Set(next)).slice(0, 2 + persistedPaths.length);
+      if (previous.length === uniqueNext.length && previous.every((path, index) => path === uniqueNext[index])) {
+        return previous;
+      }
+      return uniqueNext;
     });
   }, [activeTabPath, tabs]);
 
