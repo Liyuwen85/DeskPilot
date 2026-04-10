@@ -410,7 +410,13 @@ export function FileMenu({
                           onMouseDown={preventFocusSteal}
                           onClick={() => void handleAction(() => onOpenRecent(item))}
                         >
-                          <span className="menu-dropdown__label">{item.label}</span>
+                          <span className="menu-dropdown__recent-main">
+                            <span className="menu-dropdown__label">{item.label}</span>
+                            <span className="menu-dropdown__recent-path">{item.path}</span>
+                          </span>
+                          <span className="menu-dropdown__recent-badge">
+                            {item.kind === "directory" ? "Folder" : "File"}
+                          </span>
                         </button>
                       ))
                     ) : (

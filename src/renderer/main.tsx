@@ -47,6 +47,9 @@ const LAST_TAB_PATHS_KEY = "deskpilot:last-tab-paths";
 const SESSION_SNAPSHOT_KEY = "deskpilot:session-snapshot";
 const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_MAX_WIDTH = 520;
+const CONTEXT_MENU_MARGIN = 8;
+const TAB_CONTEXT_MENU_SIZE = { width: 160, height: 280 };
+const TREE_CONTEXT_MENU_SIZE = { width: 180, height: 224 };
 
 function normalizePathSeparators(targetPath) {
   return String(targetPath || "").replace(/[\\/]+/g, "/");
@@ -506,6 +509,20 @@ function formatFileSize(bytes) {
   return `${size} B`;
 }
 
+function clampContextMenuPosition(position, menuSize) {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const width = Math.max(0, Number(menuSize?.width) || 0);
+  const height = Math.max(0, Number(menuSize?.height) || 0);
+  const maxLeft = Math.max(CONTEXT_MENU_MARGIN, viewportWidth - width - CONTEXT_MENU_MARGIN);
+  const maxTop = Math.max(CONTEXT_MENU_MARGIN, viewportHeight - height - CONTEXT_MENU_MARGIN);
+
+  return {
+    left: Math.min(Math.max(CONTEXT_MENU_MARGIN, Number(position?.x) || 0), maxLeft),
+    top: Math.min(Math.max(CONTEXT_MENU_MARGIN, Number(position?.y) || 0), maxTop)
+  };
+}
+
 function App() {
   const [rootPath, setRootPath] = React.useState("");
   const [tree, setTree] = React.useState(null);
@@ -794,6 +811,8 @@ function App() {
   const deferredSearchQuery = React.useDeferredValue(searchQuery);
   const contextMenuTab = tabContextMenu ? tabs.find((tab) => tab.path === tabContextMenu.path) || null : null;
   const contextMenuTabIndex = contextMenuTab ? tabs.findIndex((tab) => tab.path === contextMenuTab.path) : -1;
+  const tabContextMenuPosition = clampContextMenuPosition(tabContextMenu, TAB_CONTEXT_MENU_SIZE);
+  const treeContextMenuPosition = clampContextMenuPosition(treeContextMenu, TREE_CONTEXT_MENU_SIZE);
   const activeMarkdownDraft = activeTab ? markdownDraftMap[activeTab.path] : null;
   const activeMarkdownSourceMode = Boolean(activeTab?.kind === "markdown" && markdownSourceModeMap[activeTab.path]);
   const activeTabText = activeTab
@@ -922,6 +941,7 @@ function App() {
 
     return [];
   }, [activePreviewStatus, activeTab]);
+
   const activeOutlineItems = activeTab ? outlineMap[activeTab.path] || [] : [];
   const canToggleOutline = activeTab?.kind === "markdown" || activeTab?.kind === "notebook";
   const showOutlinePane = Boolean(outlineOpen && canToggleOutline);
@@ -1492,13 +1512,42 @@ function App() {
   }, [applyWorkspaceResult, openFilePayload, rootPath, updateRecentItems]);
 
   const openRecentItem = React.useCallback(async (item) => {
+    if (!item?.path) {
+      return;
+    }
+
+    if (item.kind === "directory") {
+      const result = await window.desktopApi.openWorkspacePath(item.path);
+      applyWorkspaceResult(result);
+      updateRecentItems({
+        ...item,
+        timestamp: Date.now()
+      });
+      return;
+    }
+
+    if (item.kind === "file") {
+      if (rootPath) {
+        await openFile(item.path);
+      } else {
+        const result = await window.desktopApi.openWorkspacePath(item.path);
+        applyWorkspaceResult(result);
+      }
+
+      updateRecentItems({
+        ...item,
+        timestamp: Date.now()
+      });
+      return;
+    }
+
     const result = await window.desktopApi.openWorkspacePath(item.path);
     applyWorkspaceResult(result);
     updateRecentItems({
       ...item,
       timestamp: Date.now()
     });
-  }, [applyWorkspaceResult, updateRecentItems]);
+  }, [applyWorkspaceResult, openFile, rootPath, updateRecentItems]);
 
   const toggleDirectory = React.useCallback((targetPath) => {
     const resolvedNode = findTreeNodeByPath(tree, targetPath);
@@ -2856,8 +2905,8 @@ function App() {
         <div
           className="tab-context-menu"
           style={{
-            left: `${tabContextMenu.x}px`,
-            top: `${tabContextMenu.y}px`
+            left: `${tabContextMenuPosition.left}px`,
+            top: `${tabContextMenuPosition.top}px`
           }}
         >
           <button
@@ -2970,8 +3019,8 @@ function App() {
         <div
           className="tree-context-menu"
           style={{
-            left: `${treeContextMenu.x}px`,
-            top: `${treeContextMenu.y}px`
+            left: `${treeContextMenuPosition.left}px`,
+            top: `${treeContextMenuPosition.top}px`
           }}
         >
           <button type="button" className="tree-context-menu__item" disabled={!canCreateInTreeNode} onClick={() => {
