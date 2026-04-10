@@ -523,6 +523,12 @@ function clampContextMenuPosition(position, menuSize) {
   };
 }
 
+function getWorkspaceSearchCacheKey(rootPath, query) {
+  const normalizedRootPath = String(rootPath || "").trim().toLowerCase();
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  return `${normalizedRootPath}::${normalizedQuery}`;
+}
+
 function App() {
   const [rootPath, setRootPath] = React.useState("");
   const [tree, setTree] = React.useState(null);
@@ -550,7 +556,7 @@ function App() {
   const [recentItems, setRecentItems] = React.useState(() => loadRecentItems());
   const [sidebarWidth, setSidebarWidth] = React.useState(() => loadSidebarWidth());
   const [searchLoading, setSearchLoading] = React.useState(false);
-  const [lastCompletedSearchQuery, setLastCompletedSearchQuery] = React.useState("");
+  const [lastCompletedSearchKey, setLastCompletedSearchKey] = React.useState("");
   const [workspaceSearchResults, setWorkspaceSearchResults] = React.useState<Array<{
     name: string;
     path: string;
@@ -722,33 +728,13 @@ function App() {
     };
   }, [searchOpen, searchQuery]);
 
-  React.useEffect(() => {
-    if (searchOpen) {
-      focusCommandSearchInput();
-      return;
-    }
-  }, [focusCommandSearchInput, searchOpen]);
-
-  React.useEffect(() => {
-    if (!searchOpen) {
-      return;
-    }
-
-    const focusInput = () => {
-      focusCommandSearchInput();
-    };
-
-    const timeoutId = window.setTimeout(focusInput, 0);
-    const frameId = window.requestAnimationFrame(focusInput);
-    return () => {
-      window.clearTimeout(timeoutId);
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [focusCommandSearchInput, searchOpen, tree]);
-
-  const refreshWorkspaceSearchResults = React.useCallback(async (queryValue?: string) => {
+  const refreshWorkspaceSearchResults = React.useCallback(async (
+    queryValue?: string,
+    options: { force?: boolean } = {}
+  ) => {
     const workspaceRootPath = String(rootPath || "").trim();
     const nextQuery = String(queryValue ?? searchQuery).trim();
+    const searchCacheKey = getWorkspaceSearchCacheKey(workspaceRootPath, nextQuery);
 
     const requestId = searchRequestIdRef.current + 1;
     searchRequestIdRef.current = requestId;
@@ -758,7 +744,7 @@ function App() {
       return;
     }
 
-    if (nextQuery === lastCompletedSearchQuery) {
+    if (!options.force && searchCacheKey === lastCompletedSearchKey) {
       setSearchLoading(false);
       return;
     }
@@ -772,27 +758,27 @@ function App() {
       }
 
       setWorkspaceSearchResults(Array.isArray(results) ? results : []);
-      setLastCompletedSearchQuery(nextQuery);
+      setLastCompletedSearchKey(searchCacheKey);
     } catch {
       if (searchRequestIdRef.current !== requestId) {
         return;
       }
 
       setWorkspaceSearchResults([]);
-      setLastCompletedSearchQuery(nextQuery);
+      setLastCompletedSearchKey(searchCacheKey);
     } finally {
       if (searchRequestIdRef.current === requestId) {
         setSearchLoading(false);
       }
     }
-  }, [lastCompletedSearchQuery, rootPath, searchOpen, searchQuery]);
+  }, [lastCompletedSearchKey, rootPath, searchOpen, searchQuery]);
 
   React.useEffect(() => {
     if (!searchQuery.trim()) {
       searchRequestIdRef.current += 1;
       setSearchLoading(false);
       setDebouncedSearchQuery("");
-      setLastCompletedSearchQuery("");
+      setLastCompletedSearchKey("");
       setWorkspaceSearchResults([]);
       return;
     }
@@ -917,13 +903,17 @@ function App() {
   );
   const isEditableTab = Boolean(activeTab && !isPreviewTab && activeTab.kind !== "binary");
   const activeCharCount = activeTabText.length;
+  const indexedSearchTabsSignature = React.useMemo(() => (
+    tabs.map((tab) => `${String(tab.path || "")}\u0001${String(tab.name || "")}`).join("\u0000")
+  ), [tabs]);
   const indexedSearchTabs = React.useMemo(() => (
     tabs.map((tab) => ({
-      ...tab,
+      path: tab.path,
+      name: tab.name,
       searchName: String(tab.name || "").toLowerCase(),
       searchPath: String(tab.path || "").toLowerCase()
     }))
-  ), [tabs]);
+  ), [indexedSearchTabsSignature]);
   const activeLineCount = React.useMemo(() => {
     if (!activeTabText) {
       return 0;
@@ -1390,7 +1380,7 @@ function App() {
     await window.desktopApi.refreshWorkspaceIndex(workspaceRootPath);
     const refreshed = await window.desktopApi.openWorkspacePath(workspaceRootPath);
     applyWorkspaceResult(refreshed);
-    void refreshWorkspaceSearchResults();
+    void refreshWorkspaceSearchResults(undefined, { force: true });
   }, [applyWorkspaceResult, refreshWorkspaceSearchResults, rootPath]);
 
   React.useEffect(() => {
@@ -2359,7 +2349,7 @@ function App() {
       if (options.afterMutation) {
         await options.afterMutation(result);
       }
-      void refreshWorkspaceSearchResults();
+      void refreshWorkspaceSearchResults(undefined, { force: true });
       if (searchOpen) {
         window.setTimeout(() => {
           focusCommandSearchInput();
