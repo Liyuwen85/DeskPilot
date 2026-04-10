@@ -9,6 +9,7 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:renderer": "vite build && node scripts/fix-renderer-paths.cjs",
     "build": "npm run build:electron && npm run build:renderer",
+    "monitor:memory": "node scripts/monitor-memory.cjs",
     "release": "npm run build && node scripts/release.cjs",
     "start:app": "node scripts/start.cjs",
     "start:check": "node scripts/start.cjs --check",

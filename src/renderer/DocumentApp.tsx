@@ -38,6 +38,16 @@ function getDirName(targetPath: string) {
   return /^[a-zA-Z]:$/.test(prefix) ? `${prefix}\\` : prefix.replace(/\//g, "\\");
 }
 
+function getBaseName(targetPath: string) {
+  const normalized = String(targetPath || "").replace(/[\\/]+/g, "/").replace(/\/$/, "");
+  if (!normalized) {
+    return "";
+  }
+
+  const segments = normalized.split("/");
+  return segments[segments.length - 1] || normalized;
+}
+
 function formatPreviewDuration(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
   const hours = Math.floor(safeSeconds / 3600);
@@ -508,7 +518,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
         </div>
 
         <div className="titlebar__center titlebar__center--document">
-          <span className="titlebar__doc-path" title={tab?.path || targetPath}>{tab?.path || targetPath}</span>
+          <span className="titlebar__doc-path" title={tab?.path || targetPath}>{tab?.name || getBaseName(tab?.path || targetPath) || targetPath}</span>
         </div>
 
         <div className="titlebar__actions">
