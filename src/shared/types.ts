@@ -131,6 +131,7 @@ export interface WorkspaceSearchEntry {
 }
 
 export interface DesktopApi {
+  getAppVersion: () => Promise<string>;
   pickDirectory: () => Promise<WorkspacePayload | null>;
   openFileDialog: () => Promise<WorkspacePayload | null>;
   pickImageFile: (defaultDirectory?: string) => Promise<string | null>;

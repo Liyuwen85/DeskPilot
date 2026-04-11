@@ -1202,6 +1202,10 @@ ipcMain.handle("app:get-launch-workspace-path", async () => {
   return nextPath;
 });
 
+ipcMain.handle("app:get-version", async () => {
+  return app.getVersion();
+});
+
 ipcMain.handle("dialog:confirm-close-tab", async (event, payload: ConfirmClosePayload): Promise<ConfirmCloseResult> => {
   const currentWindow = getWindowFromEvent(event);
   if (!currentWindow) {

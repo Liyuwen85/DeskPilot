@@ -530,6 +530,7 @@ function getWorkspaceSearchCacheKey(rootPath, query) {
 }
 
 function App() {
+  const [appVersion, setAppVersion] = React.useState("");
   const [rootPath, setRootPath] = React.useState("");
   const [tree, setTree] = React.useState(null);
   const [expandedPaths, setExpandedPaths] = React.useState<Set<string>>(() => new Set<string>());
@@ -590,6 +591,26 @@ function App() {
   const searchRequestIdRef = React.useRef(0);
   const { toast, showSuccess, showError } = useToast();
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    void window.desktopApi.getAppVersion()
+      .then((version) => {
+        if (!cancelled) {
+          setAppVersion(typeof version === "string" ? version : "");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAppVersion("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const focusCommandSearchInput = React.useCallback(() => {
     const input = searchInputRef.current;
     if (!input) {
@@ -2695,7 +2716,7 @@ function App() {
               onOpenGettingStarted: () => window.desktopApi.openExternalUrl(GETTING_STARTED_URL),
               onOpenMarkdownHandbook: () => window.desktopApi.openExternalUrl(MARKDOWN_HANDBOOK_URL),
               onOpenLicense: () => window.desktopApi.openExternalUrl(LICENSE_URL),
-              version: "v0.0.2",
+              version: appVersion ? `v${appVersion}` : "",
               contactEmail: "doveyh@foxmail.com",
               homepageUrl: REPOSITORY_URL
             }}
@@ -2709,6 +2730,7 @@ function App() {
               showOutlineEnabled: canToggleOutline,
               showOutlineActive: showOutlinePane,
               onToggleOutline: () => setOutlineOpen((previous) => !previous),
+              showOpenInNewWindowItem: true,
               openInNewWindowEnabled: Boolean(activeTab && !String(activeTab.path).startsWith("untitled:")),
               onOpenInNewWindow: () => activeTab ? moveTabToDocumentWindow(activeTab.path) : undefined,
               onMinimizeWindow: () => window.desktopApi.minimizeWindow(),

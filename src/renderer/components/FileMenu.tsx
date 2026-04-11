@@ -39,6 +39,7 @@ interface ViewMenuActions {
   showOutlineEnabled?: boolean;
   showOutlineActive?: boolean;
   onToggleOutline?: () => void | Promise<void>;
+  showOpenInNewWindowItem?: boolean;
   openInNewWindowEnabled?: boolean;
   onOpenInNewWindow?: () => void | Promise<void>;
   onMinimizeWindow?: () => void | Promise<void>;
@@ -628,13 +629,17 @@ export function FileMenu({
                 {"\u663e\u793a\u5927\u7eb2"}
               </span>
             </button>
-            <div className="menu-dropdown__separator" />
-            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.openInNewWindowEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onOpenInNewWindow?.())}>
-              <span className="menu-dropdown__label">
-                <MenuCheckSpacer />
-                {"\u65b0\u7a97\u53e3\u6253\u5f00"}
-              </span>
-            </button>
+            {viewActions?.showOpenInNewWindowItem !== false ? (
+              <>
+                <div className="menu-dropdown__separator" />
+                <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.openInNewWindowEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onOpenInNewWindow?.())}>
+                  <span className="menu-dropdown__label">
+                    <MenuCheckSpacer />
+                    {"\u65b0\u7a97\u53e3\u6253\u5f00"}
+                  </span>
+                </button>
+              </>
+            ) : null}
             <div className="menu-dropdown__separator" />
             <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onMinimizeWindow?.())}>
               <span className="menu-dropdown__label">
@@ -731,7 +736,7 @@ export function FileMenu({
             <button type="button" className="about-dialog__close" onClick={() => setAboutOpen(false)}>×</button>
             <img className="about-dialog__logo" src={deskpilotLogoUrl} alt="DeskPilot logo" />
             <div className="about-dialog__title">DeskPilot</div>
-            <div className="about-dialog__version">{helpActions?.version || "v0.0.2"}</div>
+            <div className="about-dialog__version">{helpActions?.version || ""}</div>
             <div className="about-dialog__meta">
               <span>{"\u90ae\u7bb1"}</span>
               <button

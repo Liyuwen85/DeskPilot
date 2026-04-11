@@ -11,6 +11,7 @@ import type {
 } from "../shared/types";
 
 contextBridge.exposeInMainWorld("desktopApi", {
+  getAppVersion: () => ipcRenderer.invoke("app:get-version"),
   pickDirectory: () => ipcRenderer.invoke("dialog:pick-directory"),
   openFileDialog: () => ipcRenderer.invoke("dialog:open-file"),
   pickImageFile: (defaultDirectory?: string) => ipcRenderer.invoke("dialog:pick-image-file", defaultDirectory),

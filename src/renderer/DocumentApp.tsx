@@ -639,7 +639,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
           </div>
           <FileMenu
             showFileMenu={false}
-            showViewMenu={false}
+            showViewMenu={true}
             showHelpMenu={false}
             recentItems={[]}
             onNewTab={() => {}}
@@ -688,6 +688,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
               showOutlineEnabled: canToggleOutline,
               showOutlineActive: showOutlinePane,
               onToggleOutline: () => setOutlineOpen((previous) => !previous),
+              showOpenInNewWindowItem: false,
               openInNewWindowEnabled: false,
               onMinimizeWindow: () => window.desktopApi.minimizeWindow(),
               alwaysOnTopEnabled: true,

@@ -1,9 +1,9 @@
 {
   "name": "deskpilot",
-  "version": "0.1.0",
+  "version": "0.0.3",
   "private": true,
   "license": "Apache-2.0",
-  "description": "DeskPilot: a local-first markdown workbench for personal productivity.",
+  "description": "DeskPilot is a simple and lightweight Markdown editor, with support for previewing Jupyter Notebooks, PDFs, media, and other text file types.",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "build:electron": "tsc -p tsconfig.electron.json",
