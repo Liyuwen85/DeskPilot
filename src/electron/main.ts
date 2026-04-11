@@ -113,6 +113,7 @@ type WorkspaceIndexState = {
 
 const workspaceIndexStateMap = new Map<string, WorkspaceIndexState>();
 const workspaceIndexRefreshTimerMap = new Map<string, NodeJS.Timeout>();
+const workspaceIndexWarmupTimerMap = new Map<string, NodeJS.Timeout>();
 
 function normalizeDocumentPath(targetPath?: string): string {
   const rawPath = String(targetPath || "").trim();
@@ -705,6 +706,27 @@ function scheduleWorkspaceIndexRefresh(rootPath: string, delayMs = 120): void {
   workspaceIndexRefreshTimerMap.set(normalizedRootPath, timer);
 }
 
+function scheduleWorkspaceIndexWarmup(rootPath: string, delayMs = 1500): void {
+  const normalizedRootPath = normalizeWorkspacePath(rootPath);
+  if (hasLiveWorkspaceIndex(normalizedRootPath)) {
+    return;
+  }
+
+  const existingTimer = workspaceIndexWarmupTimerMap.get(normalizedRootPath);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  const timer = setTimeout(() => {
+    workspaceIndexWarmupTimerMap.delete(normalizedRootPath);
+    void ensureWorkspaceIndex(normalizedRootPath).catch((error) => {
+      console.error("[workspace-index] warmup failed", normalizedRootPath, error);
+    });
+  }, delayMs);
+
+  workspaceIndexWarmupTimerMap.set(normalizedRootPath, timer);
+}
+
 function getWorkspaceSearchScore(entry: WorkspaceIndexEntry, normalizedQuery: string): number {
   const searchName = entry.name.toLowerCase();
   const searchRelativePath = entry.relativePath.toLowerCase();
@@ -1250,9 +1272,7 @@ ipcMain.handle("workspace:open-path", async (_event, targetPath: string) => {
 
   const result = await loadWorkspaceFromPath(targetPath);
   if (result?.rootPath) {
-    void ensureWorkspaceIndex(result.rootPath).catch((error) => {
-      console.error("[workspace-index] preload failed", result.rootPath, error);
-    });
+    scheduleWorkspaceIndexWarmup(result.rootPath);
   }
 
   return result;

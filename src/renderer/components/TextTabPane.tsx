@@ -251,6 +251,9 @@ function createEditorTheme() {
     ".cm-lineNumbers .cm-gutterElement": {
       padding: "0 12px"
     },
+    ".cm-lineNumbers > :first-child": {
+      display: "none"
+    },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
       backgroundColor: "rgba(59, 130, 246, 0.22)"
     },
