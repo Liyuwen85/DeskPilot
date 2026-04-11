@@ -23,7 +23,7 @@ export const UI_TEXT = {
     gitDescription: "这里预留给 Git 状态、变更列表和提交入口。",
     extensionsTitle: "扩展",
     extensionsDescription: "这里预留给插件、SDK 能力和工具扩展入口。",
-    workspaceTitle: "当前工作区",
+    workspaceTitle: "工作区",
     resizeAriaLabel: "调整侧边栏宽度",
     emptyWorkspace: "请从文件菜单打开文件或文件夹。",
     expand: "▸",

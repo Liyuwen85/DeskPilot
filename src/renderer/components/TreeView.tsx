@@ -245,7 +245,7 @@ export const TreeView = React.memo(function TreeView({
   );
 
   React.useEffect(() => {
-    const targetPath = renamingPath || selectedPath || activeFilePath;
+    const targetPath = renamingPath || selectedPath;
     if (!targetPath || !containerRef.current) {
       return;
     }
@@ -256,7 +256,7 @@ export const TreeView = React.memo(function TreeView({
     }
 
     activeElement.scrollIntoView({ block: "nearest" });
-  }, [activeFilePath, renamingPath, selectedPath, visibleNodes]);
+  }, [renamingPath, selectedPath, visibleNodes]);
 
   const handleKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (renamingPath || visibleNodes.length === 0) {

@@ -1196,13 +1196,15 @@ function App() {
     }
   }, [expandToPath, loadDirectoryChildren, rootPath]);
 
-  React.useEffect(() => {
-    if (!activeTabPath) {
+  const revealActiveTabInTree = React.useCallback(async () => {
+    const currentPath = activeTabPathRef.current;
+    if (!currentPath) {
       return;
     }
 
-    void revealPathInTree(activeTabPath);
-  }, [activeTabPath, revealPathInTree]);
+    await revealPathInTree(currentPath);
+    setSelectedTreePath(currentPath);
+  }, [revealPathInTree]);
 
   const openFilePayload = React.useCallback((file) => {
     if (!file?.path) {
@@ -2571,7 +2573,16 @@ function App() {
       <>
         {rootPath ? (
           <div className="sidebar__workspace-path" title={rootPath}>
-            <span className="sidebar__workspace-path-text">当前工作区：{rootPath}</span>
+            <span className="sidebar__workspace-path-text">工作区 {rootPath}</span>
+            <button
+              type="button"
+              className="sidebar__workspace-refresh"
+              aria-label="定位到当前文件"
+              title="定位到当前文件"
+              onClick={() => void revealActiveTabInTree()}
+            >
+              =
+            </button>
             <button
               type="button"
               className="sidebar__workspace-refresh"
