@@ -2724,6 +2724,7 @@ function App() {
               sourceModeEnabled: activeTab?.kind === "markdown",
               sourceModeActive: activeMarkdownSourceMode,
               onToggleSourceMode: toggleActiveMarkdownSourceMode,
+              showSidebarItem: true,
               showSidebarEnabled: true,
               showSidebarActive: sidebarVisible,
               onToggleSidebar: () => setSidebarVisible((previous) => !previous),

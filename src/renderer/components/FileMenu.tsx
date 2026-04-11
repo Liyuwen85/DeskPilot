@@ -33,6 +33,7 @@ interface ViewMenuActions {
   sourceModeEnabled?: boolean;
   sourceModeActive?: boolean;
   onToggleSourceMode?: () => void | Promise<void>;
+  showSidebarItem?: boolean;
   showSidebarEnabled?: boolean;
   showSidebarActive?: boolean;
   onToggleSidebar?: () => void | Promise<void>;
@@ -140,6 +141,10 @@ export function FileMenu({
     },
     [closeAll]
   );
+
+  const showSidebarItem = viewActions?.showSidebarItem !== false;
+  const showOpenInNewWindowItem = viewActions?.showOpenInNewWindowItem !== false;
+  const hasVisibilityGroup = true;
 
   const getVisibleMenuItems = React.useCallback(
     (menuKey: MenuKey | null, includeSubmenu = recentOpen) => {
@@ -616,20 +621,26 @@ export function FileMenu({
                 {"\u6e90\u7801\u6a21\u5f0f"}
               </span>
             </button>
-            <div className="menu-dropdown__separator" />
-            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.showSidebarEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleSidebar?.())}>
-              <span className="menu-dropdown__label">
-                <MenuCheck active={viewActions?.showSidebarActive} />
-                {"\u663e\u793a\u5bfc\u822a\u680f"}
-              </span>
-            </button>
-            <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.showOutlineEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleOutline?.())}>
-              <span className="menu-dropdown__label">
-                <MenuCheck active={viewActions?.showOutlineActive} />
-                {"\u663e\u793a\u5927\u7eb2"}
-              </span>
-            </button>
-            {viewActions?.showOpenInNewWindowItem !== false ? (
+            {hasVisibilityGroup ? (
+              <>
+                <div className="menu-dropdown__separator" />
+                {showSidebarItem ? (
+                  <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.showSidebarEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleSidebar?.())}>
+                    <span className="menu-dropdown__label">
+                      <MenuCheck active={viewActions?.showSidebarActive} />
+                      {"\u663e\u793a\u5bfc\u822a\u680f"}
+                    </span>
+                  </button>
+                ) : null}
+                <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.showOutlineEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onToggleOutline?.())}>
+                  <span className="menu-dropdown__label">
+                    <MenuCheck active={viewActions?.showOutlineActive} />
+                    {"\u663e\u793a\u5927\u7eb2"}
+                  </span>
+                </button>
+              </>
+            ) : null}
+            {showOpenInNewWindowItem ? (
               <>
                 <div className="menu-dropdown__separator" />
                 <button type="button" className="menu-dropdown__item" data-menu-nav-item="true" disabled={!viewActions?.openInNewWindowEnabled} onMouseDown={preventFocusSteal} onClick={() => void handleAction(() => viewActions?.onOpenInNewWindow?.())}>

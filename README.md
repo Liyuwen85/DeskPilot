@@ -14,8 +14,6 @@ DeskPilot is a simple and lightweight Markdown editor, with support for previewi
 - [x] Preview web pages / PDF / media files
 - [x] Preview jupyter notebook file
 - [x] Implement all menu features
-- [ ] Edit table
-- [ ] Multi-language support
 - [ ] Enhance full-text search (RetrievalBoost)
 - [ ] Add an AI assistant
 - [ ] Connect to local models
@@ -23,7 +21,7 @@ DeskPilot is a simple and lightweight Markdown editor, with support for previewi
 - [ ] Add vector search
 - [ ] Add automatic content summarization
 - [ ] Add automatic related-content analysis
-- [ ] Build a local knowledge base (TBD)
+- [ ] Add a local knowledge base
 
 ## Contact
 

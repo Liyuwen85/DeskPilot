@@ -151,6 +151,7 @@ interface DocumentAppProps {
 }
 
 export function DocumentApp({ targetPath }: DocumentAppProps) {
+  const [appVersion, setAppVersion] = React.useState("");
   const [tab, setTab] = React.useState<any | null>(null);
   const [tabTextMap, setTabTextMap] = React.useState<Record<string, string | undefined>>({});
   const [savedTextMap, setSavedTextMap] = React.useState<Record<string, string | undefined>>({});
@@ -171,6 +172,26 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
   const { toast, showSuccess, showError } = useToast();
   // EditorHost is sensitive to unstable props here; keep the single-tab array memoized.
   const editorTabs = React.useMemo(() => (tab ? [tab] : []), [tab]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    void window.desktopApi.getAppVersion()
+      .then((version) => {
+        if (!cancelled) {
+          setAppVersion(typeof version === "string" ? version : "");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAppVersion("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     tabRef.current = tab;
@@ -640,7 +661,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
           <FileMenu
             showFileMenu={false}
             showViewMenu={true}
-            showHelpMenu={false}
+            showHelpMenu={true}
             recentItems={[]}
             onNewTab={() => {}}
             onNewWindow={() => {}}
@@ -675,7 +696,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
               onOpenGettingStarted: () => window.desktopApi.openExternalUrl(GETTING_STARTED_URL),
               onOpenMarkdownHandbook: () => window.desktopApi.openExternalUrl(MARKDOWN_HANDBOOK_URL),
               onOpenLicense: () => window.desktopApi.openExternalUrl(LICENSE_URL),
-              version: "v0.0.2",
+              version: appVersion ? `v${appVersion}` : "",
               contactEmail: "doveyh@foxmail.com",
               homepageUrl: REPOSITORY_URL
             }}
@@ -683,6 +704,7 @@ export function DocumentApp({ targetPath }: DocumentAppProps) {
               sourceModeEnabled: tab?.kind === "markdown",
               sourceModeActive: activeMarkdownSourceMode,
               onToggleSourceMode: toggleMarkdownSourceMode,
+              showSidebarItem: false,
               showSidebarEnabled: false,
               showSidebarActive: false,
               showOutlineEnabled: canToggleOutline,
